@@ -1,0 +1,233 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+#include <signal.h>
+#include <ncurses.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <time.h>
+#include <complex.h>
+#include "hollow_list.h"
+#include "escape_sequence.h"
+
+int open_terminal();
+FILE *debug_file = NULL;
+int do_ctrl_c = 0;
+int in_escape_sequence = 0;
+int red_background;
+int yellow_background;
+int green_background;
+
+static int pty_fd;
+
+void unget_str(char *str){
+	char *str_start;
+
+	str_start = str;
+	str += strlen(str);
+	while(str != str_start){
+		str--;
+		ungetch(*str);
+	}
+}
+
+uint64_t get_nanoseconds(struct timespec t){
+	return 1000000000ULL*t.tv_sec + t.tv_nsec;
+}
+
+void print_bash_output(char *str){
+	int y;
+	int x;
+
+	while(*str){
+		if(*str == 0x1B || in_escape_sequence){
+			in_escape_sequence = parse_escape_char(*str, debug_file);
+		} else if(*str == '\a')
+			fputc('\a', stdout);
+		else if(*str == '\b'){
+			getyx(stdscr, y, x);
+			x--;
+			bound_cursor_position(&y, &x);
+			move(y, x);
+		} else if(*str == '\r'){
+			getyx(stdscr, y, x);
+			move(y, 0);
+		} else if(*str == '\f'){
+			erase();
+			move(0, 0);
+		} else if(*str == '\n'){
+			getyx(stdscr, y, x);
+			//if(y >= LINES - 1){
+			//	scroll(stdscr);
+			//	move(LINES - 1, 0);
+			//} else {
+			//	move(y + 1, 0);
+			//}
+			move(y, COLS - 1);
+			printw("\n");
+		} else {
+			attrset(A_NORMAL);
+			attron(global_attr);
+			if(debug_file){
+				fprintf(debug_file, "PRINT '%c': %d %d\n", *str, (global_attr&A_BOLD) != 0, (global_attr&A_REVERSE) != 0);
+				fflush(debug_file);
+			}
+			addch(*str);
+		}
+		str++;
+	}
+}
+
+static void blank_free(int i){
+
+}
+
+void exit_terminal(){
+	refresh();
+	endwin();
+	close(pty_fd);
+	if(pairs_table)
+		free_hollow_list(pairs_table, blank_free);
+	if(debug_file)
+		fclose(debug_file);
+	printf("Terminal closed\n");
+
+	exit(0);
+}
+
+void ctrl_c(int sig){
+	do_ctrl_c = 1;
+}
+
+int main(int argc, char **argv){
+	char buffer[8192] = {0};
+	int key_press;
+	char current_char;
+	int chars_read;
+	struct timespec last_time;
+	struct timespec current_time;
+	struct timespec sleep_time;
+	uint64_t last_nanoseconds;
+	uint64_t current_nanoseconds;
+	struct sigaction sigint_action;
+	fd_set readable;
+	struct timeval no_wait;
+	sigset_t block_sigint;
+
+	if(argc >= 2 && !strcmp(argv[1], "--debug")){
+		printf("Opening in debug mode\n");
+		debug_file = fopen("termr_debug", "w");
+	}
+
+	sigint_action.sa_handler = ctrl_c;
+	sigint_action.sa_flags = 0;
+	sigemptyset(&(sigint_action.sa_mask));
+	sigaction(SIGINT, &sigint_action, NULL);
+
+	sigemptyset(&block_sigint);
+	sigaddset(&block_sigint, SIGINT);
+
+	initscr();
+	if(!has_colors()){
+		endwin();
+		fprintf(stderr, "Error: the terminal does not support colors\n");
+		if(debug_file)
+			fclose(debug_file);
+		return 1;
+	}
+	pty_fd = open_terminal();
+	if(pty_fd == -1 || fcntl(pty_fd, F_SETFL, O_NONBLOCK) < 0){
+		endwin();
+		fprintf(stderr, "Error: Could not make read-end of pipe non/blocking\n");
+		if(debug_file)
+			fclose(debug_file);
+		return 1;
+	}
+
+	cbreak();
+	start_color();
+	if(COLORS >= 256){
+		init_pair(1, COLOR_WHITE, COLOR_BLACK);
+		init_pair(2, COLOR_WHITE, 52);
+		init_pair(3, COLOR_WHITE, 58);
+		init_pair(4, COLOR_WHITE, 22);
+		red_background = 52;
+		yellow_background = 58;
+		green_background = 22;
+	} else {
+		init_pair(1, COLOR_WHITE, COLOR_BLACK);
+		init_pair(2, COLOR_WHITE, COLOR_RED);
+		init_pair(3, COLOR_WHITE, COLOR_YELLOW);
+		init_pair(4, COLOR_WHITE, COLOR_GREEN);
+		red_background = COLOR_RED;
+		yellow_background = COLOR_YELLOW;
+		green_background = COLOR_GREEN;
+	}
+	noecho();
+	nodelay(stdscr, 1);
+	setscrreg(0, 0);
+	scrollok(stdscr, 1);
+	create_color_pairs(5);
+	global_foreground_color = COLOR_WHITE;
+	global_background_color = COLOR_BLACK;
+	bkgd(get_global_color());
+	erase();
+
+	curs_set(1);
+	clock_gettime(CLOCK_MONOTONIC, &last_time);
+	while(1){
+		sigprocmask(SIG_SETMASK, &(sigint_action.sa_mask), NULL);
+		while((key_press = getch()) != ERR){
+			current_char = key_press;
+			if(current_char == '\n'){
+				if(debug_file)
+					fprintf(debug_file, "INPUT: enter\n");
+				if(write(pty_fd, "\r", 1) < 0){
+					fprintf(stderr, "Error: failed to write to terminal device\n");
+				}
+			} else {
+				if(debug_file)
+					fprintf(debug_file, "INPUT: '%x', '%c'\n", current_char, current_char);
+				if(write(pty_fd, &current_char, 1) < 0){
+					fprintf(stderr, "Error: Failed to write to terminal device\n");
+				}
+			}
+		}
+		FD_ZERO(&readable);
+		FD_SET(pty_fd, &readable);
+		no_wait.tv_sec = 0;
+		no_wait.tv_usec = 0;
+
+		if(select(pty_fd + 1, &readable, NULL, NULL, &no_wait) > 0){
+			chars_read = read(pty_fd, buffer, 8191);
+			if(chars_read > 0){
+				//curs_set(0);
+				print_bash_output(buffer);
+				memset(buffer, 0, sizeof(char)*8192);
+			} else if(chars_read <= 0){
+				exit_terminal();
+			}
+		} else {
+			//curs_set(1);
+		}
+		refresh();
+		clock_gettime(CLOCK_MONOTONIC, &current_time);
+		last_nanoseconds = get_nanoseconds(last_time);
+		current_nanoseconds = get_nanoseconds(current_time);
+		if(current_nanoseconds - last_nanoseconds < 25000000ULL){
+			sleep_time = (struct timespec) {.tv_sec = 0, .tv_nsec = 25000000ULL - current_nanoseconds + last_nanoseconds};
+			sigprocmask(SIG_SETMASK, &block_sigint, NULL);
+			nanosleep(&sleep_time, NULL);
+			sigprocmask(SIG_SETMASK, &(sigint_action.sa_mask), NULL);
+			if(do_ctrl_c){
+				write(pty_fd, "\x03", 1);
+				do_ctrl_c = 0;
+			}
+			last_time.tv_sec = (last_nanoseconds + 25000000)/1000000000ULL;
+			last_time.tv_nsec = (last_nanoseconds + 25000000)%1000000000ULL;
+		} else {
+			clock_gettime(CLOCK_MONOTONIC, &last_time);
+		}
+	}
+}

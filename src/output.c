@@ -7,6 +7,10 @@
 extern FILE *output_file;
 extern int global_attr;
 
+static int frame_count = 0;
+
+static void termr_output_frames();
+
 void termr_write_header(){
 	struct termr_header header;
 	
@@ -22,6 +26,8 @@ void termr_write_header(){
 void termr_input(char c){
 	struct termr_update update;
 
+	if(frame_count)
+		termr_output_frames();
 	update.update_type = INPUT;
 	update.character = c;
 
@@ -31,6 +37,9 @@ void termr_input(char c){
 void termr_addch(char c, int do_print){
 	chtype prev_character;
 	struct termr_update update;
+
+	if(frame_count)
+		termr_output_frames();
 
 	prev_character = inch();
 
@@ -49,6 +58,9 @@ void termr_set_attr(int new_attr){
 	int prev_attr;
 	struct termr_update update;
 
+	if(frame_count)
+		termr_output_frames();
+
 	prev_attr = global_attr;
 
 	update.update_type = ATTR;
@@ -65,6 +77,9 @@ void termr_move(int y, int x){
 	int prev_y;
 	struct termr_update update;
 
+	if(frame_count)
+		termr_output_frames();
+
 	getyx(stdscr, prev_y, prev_x);
 
 	update.update_type = CURSOR;
@@ -78,16 +93,23 @@ void termr_move(int y, int x){
 	move(y, x);
 }
 
-void termr_next_frame(int zoom_ins, int zoom_outs, int pos_x, int pos_y, int frame_count){
+//This only increments a frame counter so that multiple frames where nothing happens can be merged.
+void termr_next_frame(int inp_frame_count){
+	frame_count += inp_frame_count;
+}
+
+static void termr_output_frames(){
 	struct termr_update update;
 
 	update.update_type = NEXT_FRAME;
-	update.zoom_ins = zoom_ins;
-	update.zoom_outs = zoom_outs;
-	update.pos_x = pos_x;
-	update.pos_y = pos_y;
+	update.zoom_ins = 0;
+	update.zoom_outs = 0;
+	update.pos_x = 0;
+	update.pos_y = 0;
 	update.frame_count = frame_count;
 
 	fwrite(&update, sizeof(struct termr_update), 1, output_file);
+
+	frame_count = 0;
 }
 

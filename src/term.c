@@ -221,13 +221,13 @@ int main(int argc, char **argv){
 		} else {
 			//curs_set(1);
 		}
-		termr_next_frame(0, 0, 0, 0, 0);
+		termr_next_frame(1);
 		refresh();
 		clock_gettime(CLOCK_MONOTONIC, &current_time);
 		last_nanoseconds = get_nanoseconds(last_time);
 		current_nanoseconds = get_nanoseconds(current_time);
 		if(current_nanoseconds - last_nanoseconds < 25000000ULL){
-			sleep_time = (struct timespec) {.tv_sec = 0, .tv_nsec = 25000000ULL - current_nanoseconds + last_nanoseconds};
+			sleep_time = (struct timespec) {.tv_sec = (25000000ULL - current_nanoseconds + last_nanoseconds)/1000000000ULL, .tv_nsec = (25000000ULL - current_nanoseconds + last_nanoseconds)%1000000000ULL};
 			sigprocmask(SIG_SETMASK, &block_sigint, NULL);
 			nanosleep(&sleep_time, NULL);
 			sigprocmask(SIG_SETMASK, &(sigint_action.sa_mask), NULL);

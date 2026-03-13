@@ -23,7 +23,7 @@ struct termr_update{
 			int zoom_outs;
 			int pos_x;
 			int pos_y;
-			int frame_count;
+			unsigned int frame_count;
 		};
 		struct{
 			chtype character;

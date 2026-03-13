@@ -10,9 +10,11 @@
 #include <complex.h>
 #include "hollow_list.h"
 #include "escape_sequence.h"
+#include "output.h"
 
 int open_terminal();
 FILE *debug_file = NULL;
+FILE *output_file = NULL;
 int do_ctrl_c = 0;
 int in_escape_sequence = 0;
 int red_background;
@@ -32,11 +34,11 @@ void unget_str(char *str){
 	}
 }
 
-uint64_t get_nanoseconds(struct timespec t){
+static uint64_t get_nanoseconds(struct timespec t){
 	return 1000000000ULL*t.tv_sec + t.tv_nsec;
 }
 
-void print_bash_output(char *str){
+static void print_bash_output(char *str){
 	int y;
 	int x;
 
@@ -49,13 +51,13 @@ void print_bash_output(char *str){
 			getyx(stdscr, y, x);
 			x--;
 			bound_cursor_position(&y, &x);
-			move(y, x);
+			termr_move(y, x);
 		} else if(*str == '\r'){
 			getyx(stdscr, y, x);
-			move(y, 0);
+			termr_move(y, 0);
 		} else if(*str == '\f'){
 			erase();
-			move(0, 0);
+			termr_move(0, 0);
 		} else if(*str == '\n'){
 			getyx(stdscr, y, x);
 			//if(y >= LINES - 1){
@@ -66,6 +68,7 @@ void print_bash_output(char *str){
 			//}
 			move(y, COLS - 1);
 			printw("\n");
+			termr_addch('\n', 0);
 		} else {
 			attrset(A_NORMAL);
 			attron(global_attr);
@@ -73,7 +76,7 @@ void print_bash_output(char *str){
 				fprintf(debug_file, "PRINT '%c': %d %d\n", *str, (global_attr&A_BOLD) != 0, (global_attr&A_REVERSE) != 0);
 				fflush(debug_file);
 			}
-			addch(*str);
+			termr_addch(*str, 1);
 		}
 		str++;
 	}
@@ -91,6 +94,8 @@ void exit_terminal(){
 		free_hollow_list(pairs_table, blank_free);
 	if(debug_file)
 		fclose(debug_file);
+	if(output_file)
+		fclose(output_file);
 	printf("Terminal closed\n");
 
 	exit(0);
@@ -119,6 +124,8 @@ int main(int argc, char **argv){
 		printf("Opening in debug mode\n");
 		debug_file = fopen("termr_debug", "w");
 	}
+
+	output_file = fopen("test", "w");
 
 	sigint_action.sa_handler = ctrl_c;
 	sigint_action.sa_flags = 0;
@@ -176,6 +183,9 @@ int main(int argc, char **argv){
 
 	curs_set(1);
 	clock_gettime(CLOCK_MONOTONIC, &last_time);
+
+	termr_write_header();
+
 	while(1){
 		sigprocmask(SIG_SETMASK, &(sigint_action.sa_mask), NULL);
 		while((key_press = getch()) != ERR){
@@ -211,6 +221,7 @@ int main(int argc, char **argv){
 		} else {
 			//curs_set(1);
 		}
+		termr_next_frame(0, 0, 0, 0, 0);
 		refresh();
 		clock_gettime(CLOCK_MONOTONIC, &current_time);
 		last_nanoseconds = get_nanoseconds(last_time);

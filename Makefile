@@ -8,7 +8,7 @@ TARGET_BIN = termr.out
 BIN_LOC = /usr
 TERMINFO = src/termr.termcap
 
-SRCS = src/open_terminal.c src/term.c src/escape_sequence.c src/hollow_list.c
+SRCS = src/open_terminal.c src/term.c src/escape_sequence.c src/hollow_list.c src/output.c
 
 OBJS = $(SRCS:.c=.o)
 

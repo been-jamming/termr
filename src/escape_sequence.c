@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <ncurses.h>
 #include "hollow_list.h"
+#include "output.h"
 
 enum parse_state{
 	NONE,
@@ -37,15 +38,18 @@ extern int green_background;
 hollow_list *pairs_table = NULL;
 
 static void global_set_attr(int attr){
-	global_attr |= attr;
+	termr_set_attr(global_attr | attr);
+	//global_attr |= attr;
 }
 
 static void global_unset_attr(int attr){
-	global_attr &= ~attr;
+	termr_set_attr(global_attr & ~attr);
+	//global_attr &= ~attr;
 }
 
 static void global_set_color(int color){
-	global_attr = (global_attr&~A_COLOR) | color;
+	termr_set_attr((global_attr&~A_COLOR) | color);
+	//global_attr = (global_attr&~A_COLOR) | color;
 }
 
 int get_global_color(){
@@ -67,7 +71,7 @@ void create_color_pairs(int pairs_start){
 		write_hollow_list(pairs_table, COLOR_PAIR(i), i, -1);
 	}
 	global_attr = A_NORMAL;
-	global_set_color(get_global_color());
+	global_attr = (global_attr&~A_COLOR) | get_global_color();
 
 	color_pairs_red = i;
 	for(i = color_pairs_red, c = 0; i < color_pairs_red + 64; i++, c++){
@@ -85,7 +89,7 @@ void create_color_pairs(int pairs_start){
 		write_hollow_list(pairs_table, COLOR_PAIR(i), i, -1);
 	}
 	global_attr = A_NORMAL;
-	global_set_color(get_global_color());
+	global_attr = (global_attr&~A_COLOR) | get_global_color();
 }
 
 void sgr_nothing(void){
@@ -94,7 +98,7 @@ void sgr_nothing(void){
 }
 
 void sgr_reset(void){
-	global_attr = A_NORMAL;
+	termr_set_attr(A_NORMAL);
 	global_foreground_color = COLOR_WHITE;
 	global_background_color = COLOR_BLACK;
 	global_set_color(get_global_color());
@@ -347,7 +351,7 @@ void process_control_sequence(FILE *debug_file){
 		getyx(stdscr, y, x);
 		y -= args[0];
 		bound_cursor_position(&y, &x);
-		move(y, x);
+		termr_move(y, x);
 		if(debug_file)
 			fprintf(debug_file, "ESCAPE: move up %d\n", args[0]);
 	} else if(csi_final_byte == 'B'){
@@ -356,7 +360,7 @@ void process_control_sequence(FILE *debug_file){
 		getyx(stdscr, y, x);
 		y += args[0];
 		bound_cursor_position(&y, &x);
-		move(y, x);
+		termr_move(y, x);
 		if(debug_file)
 			fprintf(debug_file, "ESCAPE: move down %d\n", args[0]);
 	} else if(csi_final_byte == 'C'){
@@ -365,7 +369,7 @@ void process_control_sequence(FILE *debug_file){
 		getyx(stdscr, y, x);
 		x += args[0];
 		bound_cursor_position(&y, &x);
-		move(y, x);
+		termr_move(y, x);
 		if(debug_file)
 			fprintf(debug_file, "ESCAPE: move right %d\n", args[0]);
 	} else if(csi_final_byte == 'D'){
@@ -374,7 +378,7 @@ void process_control_sequence(FILE *debug_file){
 		getyx(stdscr, y, x);
 		x -= args[0];
 		bound_cursor_position(&y, &x);
-		move(y, x);
+		termr_move(y, x);
 		if(debug_file)
 			fprintf(debug_file, "ESCAPE: move left %d\n", args[0]);
 	} else if(csi_final_byte == 'E'){
@@ -383,7 +387,7 @@ void process_control_sequence(FILE *debug_file){
 		getyx(stdscr, y, x);
 		y += args[0];
 		bound_cursor_position(&y, &x);
-		move(y, 1);
+		termr_move(y, 1);
 		if(debug_file)
 			fprintf(debug_file, "ESCAPE: move to beginning of line %d rows down\n", args[0]);
 	} else if(csi_final_byte == 'F'){
@@ -392,7 +396,7 @@ void process_control_sequence(FILE *debug_file){
 		getyx(stdscr, y, x);
 		y -= args[0];
 		bound_cursor_position(&y, &x);
-		move(y, 1);
+		termr_move(y, 1);
 		if(debug_file)
 			fprintf(debug_file, "ESCAPE: move to beginning of line %d rows up\n", args[0]);
 	} else if(csi_final_byte == 'G'){
@@ -401,7 +405,7 @@ void process_control_sequence(FILE *debug_file){
 		getyx(stdscr, y, x);
 		x = args[0] - 1;
 		bound_cursor_position(&y, &x);
-		move(y, x);
+		termr_move(y, x);
 		if(debug_file)
 			fprintf(debug_file, "ESCAPE: move to column %d\n", args[0]);
 	} else if(csi_final_byte == 'H'){
@@ -412,7 +416,7 @@ void process_control_sequence(FILE *debug_file){
 		args[0]--;
 		args[1]--;
 		bound_cursor_position(args, args + 1);
-		move(args[0], args[1]);
+		termr_move(args[0], args[1]);
 		if(debug_file)
 			fprintf(debug_file, "ESCAPE: move to %d, %d\n", args[0], args[1]);
 	} else if(csi_final_byte == 'm'){
@@ -439,11 +443,11 @@ void process_control_sequence(FILE *debug_file){
 			case 1:
 				attrset(A_NORMAL);
 				getyx(stdscr, y, x);
-				move(y, 0);
+				termr_move(y, 0);
 				for(i = 0; i < x; i++){
 					printw(" ");
 				}
-				move(y, x);
+				termr_move(y, x);
 				break;
 			case 2:
 			case 3:
@@ -469,7 +473,8 @@ int parse_escape_char(char c, FILE *debug_file){
 		case ESCAPE:
 			if(c == 'c'){
 				erase();
-				global_attr = A_NORMAL;
+				//global_attr = A_NORMAL;
+				termr_set_attr(A_NORMAL);
 				global_foreground_color = COLOR_WHITE;
 				global_background_color = COLOR_BLACK;
 				global_set_color(get_global_color());

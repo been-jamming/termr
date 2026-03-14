@@ -61,7 +61,7 @@ static void print_bash_output(char *str){
 			termr_getyx(&y, &x);
 			termr_write_move(y, 0);
 		} else if(*str == '\f'){
-			termr_erase();
+			//termr_erase();
 			termr_write_move(0, 0);
 		} else if(*str == '\n'){
 			termr_write_addch('\n', 0);
@@ -81,6 +81,7 @@ void exit_terminal(){
 	refresh();
 	endwin();
 	close(pty_fd);
+	termr_finish_write();
 	if(pairs_table)
 		free_hollow_list(pairs_table, blank_free);
 	if(debug_file)
@@ -116,7 +117,7 @@ int main(int argc, char **argv){
 		debug_file = fopen("termr_debug", "w");
 	}
 
-	output_file = fopen("test", "w");
+	output_file = fopen("test", "wb");
 
 	sigint_action.sa_handler = ctrl_c;
 	sigint_action.sa_flags = 0;
@@ -203,11 +204,11 @@ int main(int argc, char **argv){
 		no_wait.tv_usec = 0;
 
 		if(select(pty_fd + 1, &readable, NULL, NULL, &no_wait) > 0){
+			memset(buffer, 0, sizeof(char)*8192);
 			chars_read = read(pty_fd, buffer, 8191);
 			if(chars_read > 0){
 				//curs_set(0);
 				print_bash_output(buffer);
-				memset(buffer, 0, sizeof(char)*8192);
 			} else if(chars_read <= 0){
 				exit_terminal();
 			}

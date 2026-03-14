@@ -4,54 +4,16 @@ struct termr_header{
 	long frames;
 	int term_size_x;
 	int term_size_y;
+	long updates_offset;
+	long num_updates;
 };
 
 enum termr_update_type{
-	NONE,
-	NEXT_FRAME,
-	INPUT,
-	PRINT,
-	CURSOR,
-	ATTR,
-	CLRTOEOL
-};
-
-struct termr_update{
-	enum termr_update_type update_type;
-	union{
-		struct{
-			int zoom_ins;
-			int zoom_outs;
-			int pos_x;
-			int pos_y;
-			unsigned int frame_count;
-		};
-		struct{
-			chtype character;
-			chtype prev_character;
-		};
-		struct{
-			int cursor_x;
-			int cursor_y;
-			int prev_cursor_x;
-			int prev_cursor_y;
-		};
-		struct{
-			int attr;
-			int prev_attr;
-		};
-	};
-};
-
-struct termr_term_state{
-	int term_size_x;
-	int term_size_y;
-	int cursor_x;
-	int cursor_y;
-	int foreground;
-	int background;
-	char **characters;
-	int **foregrounds;
-	int **backgrounds;
+	NONE = 0,
+	NEXT_FRAME = 1,
+	INPUT = 2,
+	PRINT = 3,
+	CURSOR = 4,
+	ATTR = 5
 };
 

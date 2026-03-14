@@ -1,6 +1,6 @@
 CC	:= gcc
-LFLAGS	:= -lncurses -lm 
-CFLAGS	:= -Wall #-Werror 
+LFLAGS	:= -lncurses -lm
+CFLAGS	:= -Wall -g #-Werror 
 
 RM = rm -f   # rm command
 PROJECT_NAME = termr

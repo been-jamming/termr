@@ -453,7 +453,7 @@ void process_control_sequence(FILE *debug_file){
 				break;
 			case 2:
 			case 3:
-				termr_erase();
+				//termr_erase();
 				break;
 		}
 	} else {
@@ -474,7 +474,7 @@ int parse_escape_char(char c, FILE *debug_file){
 			break;
 		case ESCAPE:
 			if(c == 'c'){
-				termr_erase();
+				//termr_erase();
 				//global_attr = A_NORMAL;
 				termr_write_set_attr(A_NORMAL);
 				global_foreground_color = COLOR_WHITE;

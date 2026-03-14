@@ -13,7 +13,6 @@ static struct termr_header header;
 FILE *output_file = NULL;
 FILE *debug_file;
 
-struct termr_term_state term_state;
 extern int global_foreground_color;
 extern int global_background_color;
 
@@ -37,7 +36,7 @@ static int open_recording(char *filename){
 }
 
 int main(int argc, char **argv){
-	struct termr_update next_update;
+	unsigned char next_update;
 
 	initscr();
 	if(!has_colors()){
@@ -97,9 +96,9 @@ int main(int argc, char **argv){
 
 	do{
 		next_update = next_action();
-		fprintf(debug_file, "%d '%c'\n", next_update.update_type, next_update.character);
+		//fprintf(debug_file, "%d\n", next_update);
 		execute_action(next_update);
-	} while(next_update.update_type != NONE);
+	} while(next_update != NONE);
 
 	fclose(debug_file);
 	endwin();

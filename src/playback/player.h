@@ -12,7 +12,8 @@ enum termr_update_type{
 	INPUT,
 	PRINT,
 	CURSOR,
-	ATTR
+	ATTR,
+	CLRTOEOL
 };
 
 struct termr_update{

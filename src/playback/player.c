@@ -6,6 +6,7 @@
 #include <time.h>
 #include "player.h"
 #include "../read.h"
+#include "../state.h"
 
 FILE *recording;
 static struct termr_header header;
@@ -33,53 +34,6 @@ static int open_recording(char *filename){
 	recording = fopen(filename, "rb");
 
 	return recording == NULL;
-}
-
-static void init_term_state(struct termr_term_state *term_state){
-	int x;
-	int y;
-
-	for(x = 0; x < term_state->term_size_x; x++){
-		for(y = 0; y < term_state->term_size_y; y++){
-			term_state->characters[x][y] = ' ';
-			term_state->foregrounds[x][y] = COLOR_WHITE;
-			term_state->backgrounds[x][y] = COLOR_BLACK;
-		}
-	}
-
-	term_state->cursor_x = 0;
-	term_state->cursor_y = 0;
-}
-
-static void scroll_virtual_term(struct termr_term_state *term_state){
-	int x;
-	int y;
-
-	for(x = 0; x < term_state->term_size_x; x++){
-		for(y = 1; y < term_state->term_size_y; y++){
-			term_state->characters[x][y - 1] = term_state->characters[x][y];
-			term_state->foregrounds[x][y - 1] = term_state->foregrounds[x][y];
-			term_state->backgrounds[x][y - 1] = term_state->backgrounds[x][y];
-		}
-	}
-
-	for(x = 0; x < term_state->term_size_x; x++){
-		term_state->characters[x][term_state->term_size_y - 1] = ' ';
-		term_state->foregrounds[x][term_state->term_size_y - 1] = term_state->foreground;
-		term_state->backgrounds[x][term_state->term_size_y - 1] = term_state->background;
-	}
-
-	term_state->cursor_y--;
-}
-
-void print_virtual_term(struct termr_term_state *term_state, char c, int foreground, int background){
-	while(term_state->cursor_y >= term_state->term_size_y){
-		scroll_virtual_term(term_state);
-	}
-
-	term_state->characters[term_state->cursor_x][term_state->cursor_y] = c;
-	term_state->foregrounds[term_state->cursor_x][term_state->cursor_y] = foreground;
-	term_state->foregrounds[term_state->cursor_x][term_state->cursor_y] = background;
 }
 
 int main(int argc, char **argv){
@@ -114,12 +68,14 @@ int main(int argc, char **argv){
 	noecho();
 	nodelay(stdscr, 1);
 	setscrreg(0, 0);
-	scrollok(stdscr, 1);
+	scrollok(stdscr, 0);
 	create_color_pairs(5);
+	init_term_state(COLS, LINES);
+	termr_erase();
 	global_foreground_color = COLOR_WHITE;
 	global_background_color = COLOR_BLACK;
 	bkgd(get_global_color());
-	erase();
+	termr_erase();
 
 	curs_set(1);
 	clock_gettime(CLOCK_MONOTONIC, &last_time);

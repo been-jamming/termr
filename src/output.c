@@ -3,6 +3,7 @@
 #include <string.h>
 #include <ncurses.h>
 #include "playback/player.h"
+#include "state.h"
 
 extern FILE *output_file;
 extern int global_attr;
@@ -23,7 +24,7 @@ void termr_write_header(){
 	fwrite(&header, sizeof(struct termr_header), 1, output_file);
 }
 
-void termr_input(char c){
+void termr_write_input(char c){
 	struct termr_update update;
 
 	if(frame_count)
@@ -34,7 +35,7 @@ void termr_input(char c){
 	fwrite(&update, sizeof(struct termr_update), 1, output_file);
 }
 
-void termr_addch(char c, int do_print){
+void termr_write_addch(char c, int do_print){
 	chtype prev_character;
 	struct termr_update update;
 
@@ -50,11 +51,11 @@ void termr_addch(char c, int do_print){
 	fwrite(&update, sizeof(struct termr_update), 1, output_file);
 
 	if(do_print){
-		addch(c);
+		termr_addch(c);
 	}
 }
 
-void termr_set_attr(int new_attr){
+void termr_write_set_attr(int new_attr){
 	int prev_attr;
 	struct termr_update update;
 
@@ -72,7 +73,7 @@ void termr_set_attr(int new_attr){
 	global_attr = new_attr;
 }
 
-void termr_move(int y, int x){
+void termr_write_move(int y, int x){
 	int prev_x;
 	int prev_y;
 	struct termr_update update;
@@ -80,7 +81,7 @@ void termr_move(int y, int x){
 	if(frame_count)
 		termr_output_frames();
 
-	getyx(stdscr, prev_y, prev_x);
+	termr_getyx(&prev_y, &prev_x);
 
 	update.update_type = CURSOR;
 	update.prev_cursor_x = prev_x;
@@ -90,11 +91,25 @@ void termr_move(int y, int x){
 
 	fwrite(&update, sizeof(struct termr_update), 1, output_file);
 
-	move(y, x);
+	termr_move(y, x);
+}
+
+void termr_write_clrtoeol(){
+	int cursor_x;
+	int cursor_y;
+	int x;
+
+	termr_getyx(&cursor_y, &cursor_x);
+
+	for(x = cursor_x; x < COLS; x++){
+		termr_write_addch(' ', 1);
+	}
+
+	termr_write_move(cursor_y, cursor_x);
 }
 
 //This only increments a frame counter so that multiple frames where nothing happens can be merged.
-void termr_next_frame(int inp_frame_count){
+void termr_write_next_frame(int inp_frame_count){
 	frame_count += inp_frame_count;
 }
 

@@ -11,6 +11,7 @@
 #include "hollow_list.h"
 #include "escape_sequence.h"
 #include "output.h"
+#include "state.h"
 
 int open_terminal();
 FILE *debug_file = NULL;
@@ -43,40 +44,30 @@ static void print_bash_output(char *str){
 	int x;
 
 	while(*str){
+		if(debug_file){
+			fprintf(debug_file, "PRINT '%d' '%c': %d %d\n", (int) *str, *str, (global_attr&A_BOLD) != 0, (global_attr&A_REVERSE) != 0);
+			fflush(debug_file);
+		}
 		if(*str == 0x1B || in_escape_sequence){
 			in_escape_sequence = parse_escape_char(*str, debug_file);
 		} else if(*str == '\a')
 			fputc('\a', stdout);
 		else if(*str == '\b'){
-			getyx(stdscr, y, x);
+			termr_getyx(&y, &x);
 			x--;
 			bound_cursor_position(&y, &x);
-			termr_move(y, x);
+			termr_write_move(y, x);
 		} else if(*str == '\r'){
-			getyx(stdscr, y, x);
-			termr_move(y, 0);
+			termr_getyx(&y, &x);
+			termr_write_move(y, 0);
 		} else if(*str == '\f'){
-			erase();
-			termr_move(0, 0);
+			termr_erase();
+			termr_write_move(0, 0);
 		} else if(*str == '\n'){
-			getyx(stdscr, y, x);
-			//if(y >= LINES - 1){
-			//	scroll(stdscr);
-			//	move(LINES - 1, 0);
-			//} else {
-			//	move(y + 1, 0);
-			//}
-			move(y, COLS - 1);
-			printw("\n");
-			termr_addch('\n', 0);
+			termr_write_addch('\n', 0);
+			termr_newline();
 		} else {
-			attrset(A_NORMAL);
-			attron(global_attr);
-			if(debug_file){
-				fprintf(debug_file, "PRINT '%c': %d %d\n", *str, (global_attr&A_BOLD) != 0, (global_attr&A_REVERSE) != 0);
-				fflush(debug_file);
-			}
-			termr_addch(*str, 1);
+			termr_write_addch(*str, 1);
 		}
 		str++;
 	}
@@ -174,12 +165,14 @@ int main(int argc, char **argv){
 	noecho();
 	nodelay(stdscr, 1);
 	setscrreg(0, 0);
-	scrollok(stdscr, 1);
+	scrollok(stdscr, 0);
 	create_color_pairs(5);
+	init_term_state(COLS, LINES);
+	termr_erase();
 	global_foreground_color = COLOR_WHITE;
 	global_background_color = COLOR_BLACK;
 	bkgd(get_global_color());
-	erase();
+	termr_erase();
 
 	curs_set(1);
 	clock_gettime(CLOCK_MONOTONIC, &last_time);
@@ -221,8 +214,8 @@ int main(int argc, char **argv){
 		} else {
 			//curs_set(1);
 		}
-		termr_next_frame(1);
-		refresh();
+		termr_write_next_frame(1);
+		termr_refresh();
 		clock_gettime(CLOCK_MONOTONIC, &current_time);
 		last_nanoseconds = get_nanoseconds(last_time);
 		current_nanoseconds = get_nanoseconds(current_time);

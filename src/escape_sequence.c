@@ -3,6 +3,7 @@
 #include <ncurses.h>
 #include "hollow_list.h"
 #include "output.h"
+#include "state.h"
 
 enum parse_state{
 	NONE,
@@ -21,7 +22,7 @@ int color_pairs_start;
 int color_pairs_red;
 int color_pairs_yellow;
 int color_pairs_green;
-int global_attr = 0;
+extern int global_attr;
 int auto_margins = 1;
 
 static char csi_parameters[256];
@@ -38,17 +39,17 @@ extern int green_background;
 hollow_list *pairs_table = NULL;
 
 static void global_set_attr(int attr){
-	termr_set_attr(global_attr | attr);
+	termr_write_set_attr(global_attr | attr);
 	//global_attr |= attr;
 }
 
 static void global_unset_attr(int attr){
-	termr_set_attr(global_attr & ~attr);
+	termr_write_set_attr(global_attr & ~attr);
 	//global_attr &= ~attr;
 }
 
 static void global_set_color(int color){
-	termr_set_attr((global_attr&~A_COLOR) | color);
+	termr_write_set_attr((global_attr&~A_COLOR) | color);
 	//global_attr = (global_attr&~A_COLOR) | color;
 }
 
@@ -98,7 +99,7 @@ void sgr_nothing(void){
 }
 
 void sgr_reset(void){
-	termr_set_attr(A_NORMAL);
+	termr_write_set_attr(A_NORMAL);
 	global_foreground_color = COLOR_WHITE;
 	global_background_color = COLOR_BLACK;
 	global_set_color(get_global_color());
@@ -348,64 +349,64 @@ void process_control_sequence(FILE *debug_file){
 	} else if(csi_final_byte == 'A'){
 		if(args[0] <= 0)
 			args[0] = 1;
-		getyx(stdscr, y, x);
+		termr_getyx(&y, &x);
 		y -= args[0];
 		bound_cursor_position(&y, &x);
-		termr_move(y, x);
+		termr_write_move(y, x);
 		if(debug_file)
 			fprintf(debug_file, "ESCAPE: move up %d\n", args[0]);
 	} else if(csi_final_byte == 'B'){
 		if(!csi_parameters[0] || args[0] <= 0)
 			args[0] = 1;
-		getyx(stdscr, y, x);
+		termr_getyx(&y, &x);
 		y += args[0];
 		bound_cursor_position(&y, &x);
-		termr_move(y, x);
+		termr_write_move(y, x);
 		if(debug_file)
 			fprintf(debug_file, "ESCAPE: move down %d\n", args[0]);
 	} else if(csi_final_byte == 'C'){
 		if(!csi_parameters[0] || args[0] <= 0)
 			args[0] = 1;
-		getyx(stdscr, y, x);
+		termr_getyx(&y, &x);
 		x += args[0];
 		bound_cursor_position(&y, &x);
-		termr_move(y, x);
+		termr_write_move(y, x);
 		if(debug_file)
 			fprintf(debug_file, "ESCAPE: move right %d\n", args[0]);
 	} else if(csi_final_byte == 'D'){
 		if(!csi_parameters[0] || args[0] <= 0)
 			args[0] = 1;
-		getyx(stdscr, y, x);
+		termr_getyx(&y, &x);
 		x -= args[0];
 		bound_cursor_position(&y, &x);
-		termr_move(y, x);
+		termr_write_move(y, x);
 		if(debug_file)
 			fprintf(debug_file, "ESCAPE: move left %d\n", args[0]);
 	} else if(csi_final_byte == 'E'){
 		if(!csi_parameters[0] || args[0] <= 0)
 			args[0] = 1;
-		getyx(stdscr, y, x);
+		termr_getyx(&y, &x);
 		y += args[0];
 		bound_cursor_position(&y, &x);
-		termr_move(y, 1);
+		termr_write_move(y, 1);
 		if(debug_file)
 			fprintf(debug_file, "ESCAPE: move to beginning of line %d rows down\n", args[0]);
 	} else if(csi_final_byte == 'F'){
 		if(!csi_parameters[0] || args[0] <= 0)
 			args[0] = 1;
-		getyx(stdscr, y, x);
+		termr_getyx(&y, &x);
 		y -= args[0];
 		bound_cursor_position(&y, &x);
-		termr_move(y, 1);
+		termr_write_move(y, 1);
 		if(debug_file)
 			fprintf(debug_file, "ESCAPE: move to beginning of line %d rows up\n", args[0]);
 	} else if(csi_final_byte == 'G'){
 		if(!csi_parameters[0] || args[0] <= 0)
 			args[0] = 1;
-		getyx(stdscr, y, x);
+		termr_getyx(&y, &x);
 		x = args[0] - 1;
 		bound_cursor_position(&y, &x);
-		termr_move(y, x);
+		termr_write_move(y, x);
 		if(debug_file)
 			fprintf(debug_file, "ESCAPE: move to column %d\n", args[0]);
 	} else if(csi_final_byte == 'H'){
@@ -416,7 +417,7 @@ void process_control_sequence(FILE *debug_file){
 		args[0]--;
 		args[1]--;
 		bound_cursor_position(args, args + 1);
-		termr_move(args[0], args[1]);
+		termr_write_move(args[0], args[1]);
 		if(debug_file)
 			fprintf(debug_file, "ESCAPE: move to %d, %d\n", args[0], args[1]);
 	} else if(csi_final_byte == 'm'){
@@ -438,20 +439,21 @@ void process_control_sequence(FILE *debug_file){
 			args[0] = 0;
 		switch(args[0]){
 			case 0:
-				clrtoeol();
+				termr_write_clrtoeol();
 				break;
 			case 1:
-				attrset(A_NORMAL);
-				getyx(stdscr, y, x);
-				termr_move(y, 0);
+				termr_write_set_attr(A_NORMAL);
+				termr_getyx(&y, &x);
+				termr_write_move(y, 0);
 				for(i = 0; i < x; i++){
-					printw(" ");
+					termr_write_addch(' ', 1);
+					//printw(" ");
 				}
-				termr_move(y, x);
+				termr_write_move(y, x);
 				break;
 			case 2:
 			case 3:
-				erase();
+				termr_erase();
 				break;
 		}
 	} else {
@@ -472,9 +474,9 @@ int parse_escape_char(char c, FILE *debug_file){
 			break;
 		case ESCAPE:
 			if(c == 'c'){
-				erase();
+				termr_erase();
 				//global_attr = A_NORMAL;
-				termr_set_attr(A_NORMAL);
+				termr_write_set_attr(A_NORMAL);
 				global_foreground_color = COLOR_WHITE;
 				global_background_color = COLOR_BLACK;
 				global_set_color(get_global_color());

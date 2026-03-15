@@ -17,3 +17,8 @@ enum termr_update_type{
 	ATTR = 5
 };
 
+enum termr_playback_state{
+	PLAY,
+	PAUSE
+};
+

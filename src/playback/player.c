@@ -29,14 +29,55 @@ struct timespec sleep_time;
 uint64_t last_nanoseconds;
 uint64_t current_nanoseconds;
 
+extern int global_attr;
+
+static char status[256] = {0};
+
+float playback_speed = 1.0;
+
+enum termr_playback_state playback_state;
+
 static int open_recording(char *filename){
 	recording = fopen(filename, "rb");
 
 	return recording == NULL;
 }
 
+void display_status(){
+	int last_x;
+	int last_y;
+	int x;
+	int color;
+	int last_attr;
+	char *status_byte;
+
+	global_foreground_color = COLOR_WHITE;
+	global_background_color = COLOR_BLACK;
+	color = get_global_color();
+	attrset(A_STANDOUT | color);
+
+	termr_getyx(&last_y, &last_x);
+
+	status_byte = status;
+
+	for(x = 0; x < COLS; x++){
+		move(LINES - 1, x);
+		if(*status_byte){
+			addch(*status_byte);
+			status_byte++;
+		} else {
+			addch(' ');
+		}
+	}
+
+	move(last_y, last_x);
+
+	refresh();
+}
+
 int main(int argc, char **argv){
 	unsigned char next_update;
+	int key_press;
 
 	initscr();
 	if(!has_colors()){
@@ -93,10 +134,41 @@ int main(int argc, char **argv){
 
 	debug_file = fopen("debug.txt", "w");
 	clock_gettime(CLOCK_MONOTONIC, &last_time);
+	playback_state = PLAY;
 
 	do{
+		while((key_press = getch()) != ERR){
+			switch(key_press){
+				case ' ':
+					if(playback_state == PLAY){
+						playback_state = PAUSE;
+						strcpy(status, "Pause");
+					} else {
+						playback_state = PLAY;
+					}
+					break;
+				case '>':
+					if(playback_speed < 65536){
+						playback_speed *= 2;
+					}
+
+					snprintf(status, 255, "Speed: %f", playback_speed);
+					break;
+				case '<':
+					if(playback_speed > (1.0/65536)){
+						playback_speed /= 2;
+					}
+
+					snprintf(status, 255, "Speed: %f", playback_speed);
+					break;
+			}
+		}
+
+		if(playback_state != PLAY){
+			display_status();
+		}
+
 		next_update = next_action();
-		//fprintf(debug_file, "%d\n", next_update);
 		execute_action(next_update);
 	} while(next_update != NONE);
 

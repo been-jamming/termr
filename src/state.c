@@ -53,6 +53,10 @@ void termr_addch(char c){
 		termr_advance_cursor();
 }
 
+void termr_putch(char c){
+	state.characters[state.cursor_x][state.cursor_y] = c | global_attr;
+}
+
 void termr_newline(){
 	if(state.cursor_y < state.height - 1){
 		state.cursor_x = 0;

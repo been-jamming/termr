@@ -133,8 +133,8 @@ void termr_finish_write(){
 	strcpy(header.identifier, "termr");
 	header.fps = 40;
 	header.frames = total_frame_count;
-	header.term_size_x = 0;
-	header.term_size_y = 0;
+	header.term_size_x = COLS;
+	header.term_size_y = LINES;
 	header.updates_offset = updates_offset;
 	header.num_updates = num_updates;
 

@@ -12,6 +12,8 @@ void init_term_state(int width, int height){
 	state.height = height;
 	state.cursor_x = 0;
 	state.cursor_y = 0;
+	state.offset_x = 0;
+	state.offset_y = 0;
 	state.characters = malloc(sizeof(chtype *)*width);
 	for(x = 0; x < width; x++){
 		state.characters[x] = malloc(sizeof(chtype)*height);
@@ -44,8 +46,6 @@ void termr_advance_cursor(){
 		termr_scroll();
 	}
 }
-
-
 
 void termr_addch(char c){
 	state.characters[state.cursor_x][state.cursor_y] = c | global_attr;
@@ -112,19 +112,33 @@ void termr_clrtoeol(){
 	}
 }
 
+void termr_set_offset(int offset_x, int offset_y){
+	state.offset_x = offset_x;
+	state.offset_y = offset_y;
+}
+
 void termr_refresh(){
 	int x;
 	int y;
+	int clip_x;
+	int clip_y;
 
 	attrset(A_NORMAL);
 
-	for(y = 0; y < state.height; y++){
-		for(x = 0; x < state.width; x++){
+	for(y = 0; y < LINES; y++){
+		for(x = 0; x < COLS; x++){
 			move(y, x);
-			addch(state.characters[x][y]);
+
+			clip_x = x + state.offset_x;
+			clip_y = y + state.offset_y;
+			if(clip_x < state.width && clip_y < state.height){
+				addch(state.characters[clip_x][clip_y]);
+			} else {
+				addch(' ');
+			}
 		}
 	}
-	move(state.cursor_y, state.cursor_x);
+	move(state.cursor_y - state.offset_y, state.cursor_x - state.offset_x);
 	refresh();
 }
 

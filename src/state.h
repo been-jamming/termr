@@ -3,6 +3,8 @@ struct term_state{
 	int height;
 	int cursor_x;
 	int cursor_y;
+	int offset_x;
+	int offset_y;
 	chtype **characters;
 };
 
@@ -17,4 +19,5 @@ void termr_getyx(int *y, int *x);
 void termr_erase();
 void termr_clrtoeol();
 void termr_refresh();
+void termr_set_offset(int offset_x, int offset_y);
 

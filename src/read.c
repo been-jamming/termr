@@ -40,7 +40,7 @@ static void print_bash_char(char c){
 	}
 }
 
-int check_header(){
+int check_header(int *term_size_x, int *term_size_y){
 	struct termr_header header;
 	long offset;
 
@@ -60,6 +60,9 @@ int check_header(){
 	}
 
 	fseek(recording, offset, SEEK_SET);
+
+	*term_size_x = header.term_size_x;
+	*term_size_y = header.term_size_y;
 
 	return strcmp(header.identifier, "termr");
 }

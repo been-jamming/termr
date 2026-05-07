@@ -37,6 +37,11 @@ float playback_speed = 1.0;
 
 enum termr_playback_state playback_state;
 
+static int offset_x = 0;
+static int offset_y = 0;
+static int term_size_x;
+static int term_size_y;
+
 static int open_recording(char *filename){
 	recording = fopen(filename, "rb");
 
@@ -78,6 +83,7 @@ void display_status(){
 int main(int argc, char **argv){
 	unsigned char next_update;
 	int key_press;
+	int do_refresh = 0;
 
 	initscr();
 	if(!has_colors()){
@@ -105,12 +111,26 @@ int main(int argc, char **argv){
 		yellow_background = COLOR_YELLOW;
 		green_background = COLOR_GREEN;
 	}
+
+	if(open_recording("test")){
+		endwin();
+		fprintf(stderr, "Error: could not open file for reading\n");
+		return 1;
+	}
+
+	if(check_header(&term_size_x, &term_size_y)){
+		endwin();
+		fprintf(stderr, "Error: invalid file format\n");
+		return 1;
+	}
+
 	noecho();
 	nodelay(stdscr, 1);
+	keypad(stdscr, TRUE);
 	setscrreg(0, 0);
 	scrollok(stdscr, 0);
 	create_color_pairs(5);
-	init_term_state(COLS, LINES);
+	init_term_state(term_size_x, term_size_y);
 	termr_erase();
 	global_foreground_color = COLOR_WHITE;
 	global_background_color = COLOR_BLACK;
@@ -120,23 +140,12 @@ int main(int argc, char **argv){
 	curs_set(1);
 	clock_gettime(CLOCK_MONOTONIC, &last_time);
 
-	if(open_recording("test")){
-		endwin();
-		fprintf(stderr, "Error: could not open file for reading\n");
-		return 1;
-	}
-
-	if(check_header()){
-		endwin();
-		fprintf(stderr, "Error: invalid file format\n");
-		return 1;
-	}
-
 	debug_file = fopen("debug.txt", "w");
 	clock_gettime(CLOCK_MONOTONIC, &last_time);
 	playback_state = PLAY;
 
 	do{
+		do_refresh = 0;
 		while((key_press = getch()) != ERR){
 			switch(key_press){
 				case ' ':
@@ -161,6 +170,34 @@ int main(int argc, char **argv){
 
 					snprintf(status, 255, "Speed: %f", playback_speed);
 					break;
+				case KEY_LEFT:
+					if(offset_x > 0){
+						offset_x--;
+					}
+					termr_set_offset(offset_x, offset_y);
+					do_refresh = 1;
+					snprintf(status, 255, "Move");
+					break;
+				case KEY_RIGHT:
+					offset_x++;
+					termr_set_offset(offset_x, offset_y);
+					do_refresh = 1;
+					snprintf(status, 255, "Move");
+					break;
+				case KEY_UP:
+					if(offset_y > 0){
+						offset_y--;
+					}
+					termr_set_offset(offset_x, offset_y);
+					do_refresh = 1;
+					snprintf(status, 255, "Move");
+					break;
+				case KEY_DOWN:
+					offset_y++;
+					termr_set_offset(offset_x, offset_y);
+					do_refresh = 1;
+					snprintf(status, 255, "Move");
+					break;
 			}
 		}
 
@@ -170,6 +207,10 @@ int main(int argc, char **argv){
 
 		next_update = next_action();
 		execute_action(next_update);
+
+		if(do_refresh){
+			termr_refresh();
+		}
 	} while(next_update != NONE);
 
 	fclose(debug_file);

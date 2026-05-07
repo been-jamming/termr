@@ -22,3 +22,24 @@ enum termr_playback_state{
 	PAUSE
 };
 
+enum termr_playback_update{
+	CUT,
+	ZOOM_IN,
+	ZOOM_OUT,
+	SPEED_UP,
+	SLOW_DOWN,
+	MOVE
+};
+
+struct termr_playback_struct{
+	enum termr_playback_update update_type;
+	union{
+		struct{
+			int pos_x;
+			int pos_y;
+		};
+		int frames;
+		int amount;
+	};
+};
+

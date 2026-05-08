@@ -7,6 +7,7 @@
 #include "player.h"
 #include "../read.h"
 #include "../state.h"
+#include "virtkeys.h"
 
 FILE *recording;
 static struct termr_header header;
@@ -85,6 +86,7 @@ int main(int argc, char **argv){
 	int key_press;
 	int do_refresh = 0;
 
+	init_virtkeys();
 	initscr();
 	if(!has_colors()){
 		endwin();
@@ -198,6 +200,16 @@ int main(int argc, char **argv){
 					do_refresh = 1;
 					snprintf(status, 255, "Move");
 					break;
+				case '+':
+					zoom_in();
+					do_refresh = 1;
+					snprintf(status, 255, "Zoom in");
+					break;
+				case '-':
+					zoom_out();
+					do_refresh = 1;
+					snprintf(status, 255, "Zoom out");
+					break;
 			}
 		}
 
@@ -216,4 +228,5 @@ int main(int argc, char **argv){
 	fclose(debug_file);
 	endwin();
 	fclose(recording);
+	deinit_virtkeys();
 }

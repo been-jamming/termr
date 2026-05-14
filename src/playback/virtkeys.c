@@ -16,7 +16,7 @@ void init_virtkeys(void){
 
 	ioctl(fd, UI_SET_EVBIT, EV_KEY);
 	ioctl(fd, UI_SET_KEYBIT, KEY_LEFTCTRL);
-	ioctl(fd, UI_SET_KEYBIT, KEY_LEFTCTRL);
+	ioctl(fd, UI_SET_KEYBIT, KEY_LEFTSHIFT);
 	ioctl(fd, UI_SET_KEYBIT, KEY_KPPLUS);
 	ioctl(fd, UI_SET_KEYBIT, KEY_KPMINUS);
 
@@ -51,9 +51,13 @@ static void emit(int type, int code, int val){
 void zoom_in(void){
 	emit(EV_KEY, KEY_LEFTCTRL, 1);
 	emit(EV_SYN, SYN_REPORT, 0);
+	emit(EV_KEY, KEY_LEFTSHIFT, 1);
+	emit(EV_SYN, SYN_REPORT, 0);
 	emit(EV_KEY, KEY_KPPLUS, 1);
 	emit(EV_SYN, SYN_REPORT, 0);
 	emit(EV_KEY, KEY_KPPLUS, 0);
+	emit(EV_SYN, SYN_REPORT, 0);
+	emit(EV_KEY, KEY_LEFTSHIFT, 0);
 	emit(EV_SYN, SYN_REPORT, 0);
 	emit(EV_KEY, KEY_LEFTCTRL, 0);
 	emit(EV_SYN, SYN_REPORT, 0);
@@ -62,9 +66,13 @@ void zoom_in(void){
 void zoom_out(void){
 	emit(EV_KEY, KEY_LEFTCTRL, 1);
 	emit(EV_SYN, SYN_REPORT, 0);
+	emit(EV_KEY, KEY_LEFTSHIFT, 1);
+	emit(EV_SYN, SYN_REPORT, 0);
 	emit(EV_KEY, KEY_KPMINUS, 1);
 	emit(EV_SYN, SYN_REPORT, 0);
 	emit(EV_KEY, KEY_KPMINUS, 0);
+	emit(EV_SYN, SYN_REPORT, 0);
+	emit(EV_KEY, KEY_LEFTSHIFT, 0);
 	emit(EV_SYN, SYN_REPORT, 0);
 	emit(EV_KEY, KEY_LEFTCTRL, 0);
 	emit(EV_SYN, SYN_REPORT, 0);

@@ -23,7 +23,12 @@ static long current_update = 0;
 
 extern enum termr_playback_state playback_state;
 
-extern float playback_speed;
+extern double playback_speed;
+
+long frame = 0;
+static long frame_start = 0;
+static long duration = 0;
+unsigned char waiting = 0;
 
 static uint64_t get_nanoseconds(struct timespec t){
 	return 1000000000ULL*t.tv_sec + t.tv_nsec;
@@ -64,7 +69,7 @@ int check_header(int *term_size_x, int *term_size_y){
 	*term_size_x = header.term_size_x;
 	*term_size_y = header.term_size_y;
 
-	return strcmp(header.identifier, "termr");
+	return header.identifier[5] || strcmp(header.identifier, "termr");
 }
 
 unsigned char next_action(){
@@ -74,7 +79,7 @@ unsigned char next_action(){
 		output = updates[current_update];
 	else
 		output = NONE;
-	if(current_update < num_updates && playback_state == PLAY)
+	if(output != NEXT_FRAME && current_update < num_updates && playback_state == PLAY)
 		current_update++;
 
 	return output;
@@ -93,22 +98,15 @@ void execute_action(unsigned char update_type){
 			case NONE:
 				break;
 			case NEXT_FRAME:
-				fread(&frame_count_char, sizeof(unsigned char), 1, recording);
-				frame_count = frame_count_char;
-				if(frame_count == 0)
-					frame_count = 256;
+				if(!waiting){
+					fread(&frame_count_char, sizeof(unsigned char), 1, recording);
+					duration = frame_count_char;
+					if(duration == 0)
+						duration = 256;
+					frame_start = frame;
 
-				termr_refresh();
-				clock_gettime(CLOCK_MONOTONIC, &current_time);
-				last_nanoseconds = get_nanoseconds(last_time);
-				current_nanoseconds = get_nanoseconds(current_time);
-				if(current_nanoseconds - last_nanoseconds < 25000000ULL/playback_speed*frame_count){
-					sleep_time = (struct timespec) {.tv_sec = (25000000ULL/playback_speed*frame_count - current_nanoseconds + last_nanoseconds)/1000000000ULL, .tv_nsec = fmod(25000000ULL/((double) playback_speed)*frame_count - current_nanoseconds + last_nanoseconds, 1000000000ULL)};
-					nanosleep(&sleep_time, NULL);
-					last_time.tv_sec = (last_nanoseconds + 25000000ULL/playback_speed*frame_count)/1000000000ULL;
-					last_time.tv_nsec = fmod(last_nanoseconds + 25000000ULL/((double) playback_speed)*frame_count, 1000000000ULL);
-				} else {
-					clock_gettime(CLOCK_MONOTONIC, &last_time);
+					termr_refresh();
+					waiting = 1;
 				}
 				break;
 			case INPUT:
@@ -138,6 +136,26 @@ void execute_action(unsigned char update_type){
 			last_time.tv_nsec = (last_nanoseconds + 25000000ULL)%1000000000ULL;
 		} else {
 			clock_gettime(CLOCK_MONOTONIC, &last_time);
+		}
+	}
+
+	if(playback_state == PLAY && waiting){
+		clock_gettime(CLOCK_MONOTONIC, &current_time);
+		last_nanoseconds = get_nanoseconds(last_time);
+		current_nanoseconds = get_nanoseconds(current_time);
+		if(current_nanoseconds - last_nanoseconds < 25000000ULL/playback_speed){
+			sleep_time = (struct timespec) {.tv_sec = (25000000ULL/playback_speed - current_nanoseconds + last_nanoseconds)/1000000000ULL, .tv_nsec = (long long unsigned int) (25000000ULL/playback_speed - current_nanoseconds + last_nanoseconds)%1000000000ULL};
+			nanosleep(&sleep_time, NULL);
+			last_time.tv_sec = (last_nanoseconds + 25000000ULL/playback_speed)/1000000000ULL;
+			last_time.tv_nsec = (long long unsigned int) (last_nanoseconds + 25000000ULL/playback_speed)%1000000000ULL;
+		} else {
+			clock_gettime(CLOCK_MONOTONIC, &last_time);
+		}
+
+		frame++;
+		if(frame - frame_start >= duration){
+			waiting = 0;
+			current_update++;
 		}
 	}
 }

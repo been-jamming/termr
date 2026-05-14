@@ -34,7 +34,7 @@ extern int global_attr;
 
 static char status[256] = {0};
 
-float playback_speed = 1.0;
+double playback_speed = 1.0;
 
 enum termr_playback_state playback_state;
 
@@ -157,20 +157,21 @@ int main(int argc, char **argv){
 					} else {
 						playback_state = PLAY;
 					}
+					do_refresh = 1;
 					break;
 				case '>':
 					if(playback_speed < 65536){
 						playback_speed *= 2;
 					}
 
-					snprintf(status, 255, "Speed: %f", playback_speed);
+					snprintf(status, 255, "Speed: %lf", playback_speed);
 					break;
 				case '<':
 					if(playback_speed > (1.0/65536)){
 						playback_speed /= 2;
 					}
 
-					snprintf(status, 255, "Speed: %f", playback_speed);
+					snprintf(status, 255, "Speed: %lf", playback_speed);
 					break;
 				case KEY_LEFT:
 					if(offset_x > 0){

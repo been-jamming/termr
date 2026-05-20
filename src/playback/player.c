@@ -8,6 +8,7 @@
 #include "../read.h"
 #include "../state.h"
 #include "virtkeys.h"
+#include "playback_output.h"
 
 FILE *recording;
 static struct termr_header header;
@@ -31,17 +32,20 @@ uint64_t last_nanoseconds;
 uint64_t current_nanoseconds;
 
 extern int global_attr;
+extern long frame;
 
 static char status[256] = {0};
 
-double playback_speed = 1.0;
+unsigned char paused = 0;
+struct termr_playback_state playback_state =
+	(struct termr_playback_state) {.zoom = 0, .x = 0, .y = 0, .speed = 1.0, .frame = 0, .cut = 0};
 
-enum termr_playback_state playback_state;
-
-static int offset_x = 0;
-static int offset_y = 0;
 static int term_size_x;
 static int term_size_y;
+
+unsigned char recording_playback = 0;
+unsigned char playing_playback_file = 0;
+FILE *termrp_file = NULL;
 
 static int open_recording(char *filename){
 	recording = fopen(filename, "rb");
@@ -81,10 +85,25 @@ void display_status(){
 	refresh();
 }
 
+void apply_state_changes(struct termr_playback_state state, struct termr_playback_state prev_state){
+	int zoom;
+
+	termr_set_offset(state.x, state.y);
+
+	for(zoom = state.zoom; zoom < prev_state.zoom; zoom++){
+		zoom_out();
+	}
+
+	for(zoom = prev_state.zoom; zoom < state.zoom; zoom++){
+		zoom_in();
+	}
+}
+
 int main(int argc, char **argv){
 	unsigned char next_update;
 	int key_press;
 	int do_refresh = 0;
+	struct termr_playback_state read_state;
 
 	init_virtkeys();
 	initscr();
@@ -120,6 +139,14 @@ int main(int argc, char **argv){
 		return 1;
 	}
 
+	if(argc <= 1){
+		init_playback_states(playback_state);
+	} else {
+		termrp_file = fopen("test.termrp", "rb");
+		read_playback_file(termrp_file);
+		fclose(termrp_file);
+	}
+
 	if(check_header(&term_size_x, &term_size_y)){
 		endwin();
 		fprintf(stderr, "Error: invalid file format\n");
@@ -144,77 +171,116 @@ int main(int argc, char **argv){
 
 	debug_file = fopen("debug.txt", "w");
 	clock_gettime(CLOCK_MONOTONIC, &last_time);
-	playback_state = PLAY;
+	paused = 0;
 
 	do{
 		do_refresh = 0;
 		while((key_press = getch()) != ERR){
 			switch(key_press){
 				case ' ':
-					if(playback_state == PLAY){
-						playback_state = PAUSE;
+					if(!paused){
+						paused = 1;
 						strcpy(status, "Pause");
 					} else {
-						playback_state = PLAY;
+						paused = 0;
+						strcpy(status, "Unpause");
 					}
 					do_refresh = 1;
 					break;
 				case '>':
-					if(playback_speed < 65536){
-						playback_speed *= 2;
+					if(playback_state.speed < 65536){
+						playback_state.speed *= 2;
 					}
 
-					snprintf(status, 255, "Speed: %lf", playback_speed);
+					snprintf(status, 255, "Speed: %lf", playback_state.speed);
 					break;
 				case '<':
-					if(playback_speed > (1.0/65536)){
-						playback_speed /= 2;
+					if(playback_state.speed > 1.0/65536){
+						playback_state.speed /= 2;
 					}
 
-					snprintf(status, 255, "Speed: %lf", playback_speed);
+					snprintf(status, 255, "Speed: %lf", playback_state.speed);
 					break;
 				case KEY_LEFT:
-					if(offset_x > 0){
-						offset_x--;
+					if(playback_state.x > 0){
+						playback_state.x--;
 					}
-					termr_set_offset(offset_x, offset_y);
+					termr_set_offset(playback_state.x, playback_state.y);
 					do_refresh = 1;
 					snprintf(status, 255, "Move");
 					break;
 				case KEY_RIGHT:
-					offset_x++;
-					termr_set_offset(offset_x, offset_y);
+					playback_state.x++;
+					termr_set_offset(playback_state.x, playback_state.y);
 					do_refresh = 1;
 					snprintf(status, 255, "Move");
 					break;
 				case KEY_UP:
-					if(offset_y > 0){
-						offset_y--;
+					if(playback_state.y > 0){
+						playback_state.y--;
 					}
-					termr_set_offset(offset_x, offset_y);
+					termr_set_offset(playback_state.x, playback_state.y);
 					do_refresh = 1;
 					snprintf(status, 255, "Move");
 					break;
 				case KEY_DOWN:
-					offset_y++;
-					termr_set_offset(offset_x, offset_y);
+					playback_state.y++;
+					termr_set_offset(playback_state.x, playback_state.y);
 					do_refresh = 1;
 					snprintf(status, 255, "Move");
 					break;
 				case '+':
 					zoom_in();
+					playback_state.zoom++;
 					do_refresh = 1;
-					snprintf(status, 255, "Zoom in");
+					snprintf(status, 255, "Zoom in %d", playback_state.zoom);
 					break;
 				case '-':
 					zoom_out();
+					playback_state.zoom--;
 					do_refresh = 1;
-					snprintf(status, 255, "Zoom out");
+					snprintf(status, 255, "Zoom out %d", playback_state.zoom);
+					break;
+				case 'p':
+					playing_playback_file = !playing_playback_file;
+					if(playing_playback_file){
+						snprintf(status, 255, "Playing from playback file");
+					} else {
+						snprintf(status, 255, "Not playing from playback file");
+					}
+					break;
+				case 'c':
+					playback_state.cut = !playback_state.cut;
+					if(playback_state.cut){
+						snprintf(status, 255, "Cut");
+					} else {
+						snprintf(status, 255, "End cut");
+					}
+					break;
+				case 'r':
+					recording_playback = !recording_playback;
+					if(recording_playback){
+						snprintf(status, 255, "Recording");
+					} else {
+						snprintf(status, 255, "End recording");
+					}
 					break;
 			}
 		}
 
-		if(playback_state != PLAY){
+		playback_state.frame = frame;
+
+		if(recording_playback){
+			write_playback_state(playback_state);
+		}
+
+		if(playing_playback_file){
+			read_state = read_playback_state();
+			apply_state_changes(read_state, playback_state);
+			playback_state = read_state;
+		}
+
+		if(paused){
 			display_status();
 		}
 
@@ -225,6 +291,10 @@ int main(int argc, char **argv){
 			termr_refresh();
 		}
 	} while(next_update != NONE);
+
+	termrp_file = fopen("test.termrp", "wb");
+	write_playback_file(termrp_file);
+	fclose(termrp_file);
 
 	fclose(debug_file);
 	endwin();

@@ -17,9 +17,13 @@ enum termr_update_type{
 	ATTR = 5
 };
 
-enum termr_playback_state{
-	PLAY,
-	PAUSE
+struct termr_playback_state{
+	int zoom;
+	int x;
+	int y;
+	double speed;
+	long frame;
+	unsigned char cut;
 };
 
 enum termr_playback_update{

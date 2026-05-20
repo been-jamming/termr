@@ -21,9 +21,8 @@ static long num_updates;
 static unsigned char *updates;
 static long current_update = 0;
 
-extern enum termr_playback_state playback_state;
-
-extern double playback_speed;
+extern unsigned char paused;
+extern struct termr_playback_state playback_state;
 
 long frame = 0;
 static long frame_start = 0;
@@ -53,6 +52,10 @@ int check_header(int *term_size_x, int *term_size_y){
 		return 1;
 	}
 
+	if(header.identifier[5] || strcmp(header.identifier, "termr")){
+		return 1;
+	}
+
 	updates_offset = header.updates_offset;
 	num_updates = header.num_updates;
 
@@ -69,7 +72,7 @@ int check_header(int *term_size_x, int *term_size_y){
 	*term_size_x = header.term_size_x;
 	*term_size_y = header.term_size_y;
 
-	return header.identifier[5] || strcmp(header.identifier, "termr");
+	return 0;
 }
 
 unsigned char next_action(){
@@ -79,7 +82,7 @@ unsigned char next_action(){
 		output = updates[current_update];
 	else
 		output = NONE;
-	if(output != NEXT_FRAME && current_update < num_updates && playback_state == PLAY)
+	if(output != NEXT_FRAME && current_update < num_updates && !paused)
 		current_update++;
 
 	return output;
@@ -93,7 +96,7 @@ void execute_action(unsigned char update_type){
 	short cursor_y;
 	int attr;
 
-	if(playback_state == PLAY){
+	if(!paused){
 		switch(update_type){
 			case NONE:
 				break;
@@ -139,15 +142,15 @@ void execute_action(unsigned char update_type){
 		}
 	}
 
-	if(playback_state == PLAY && waiting){
+	if(!paused && waiting){
 		clock_gettime(CLOCK_MONOTONIC, &current_time);
 		last_nanoseconds = get_nanoseconds(last_time);
 		current_nanoseconds = get_nanoseconds(current_time);
-		if(current_nanoseconds - last_nanoseconds < 25000000ULL/playback_speed){
-			sleep_time = (struct timespec) {.tv_sec = (25000000ULL/playback_speed - current_nanoseconds + last_nanoseconds)/1000000000ULL, .tv_nsec = (long long unsigned int) (25000000ULL/playback_speed - current_nanoseconds + last_nanoseconds)%1000000000ULL};
+		if(current_nanoseconds - last_nanoseconds < 25000000ULL/playback_state.speed){
+			sleep_time = (struct timespec) {.tv_sec = (25000000ULL/playback_state.speed - current_nanoseconds + last_nanoseconds)/1000000000ULL, .tv_nsec = (long long unsigned int) (25000000ULL/playback_state.speed - current_nanoseconds + last_nanoseconds)%1000000000ULL};
 			nanosleep(&sleep_time, NULL);
-			last_time.tv_sec = (last_nanoseconds + 25000000ULL/playback_speed)/1000000000ULL;
-			last_time.tv_nsec = (long long unsigned int) (last_nanoseconds + 25000000ULL/playback_speed)%1000000000ULL;
+			last_time.tv_sec = (last_nanoseconds + 25000000ULL/playback_state.speed)/1000000000ULL;
+			last_time.tv_nsec = (long long unsigned int) (last_nanoseconds + 25000000ULL/playback_state.speed)%1000000000ULL;
 		} else {
 			clock_gettime(CLOCK_MONOTONIC, &last_time);
 		}

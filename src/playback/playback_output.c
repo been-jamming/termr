@@ -60,11 +60,12 @@ void write_playback_state(struct termr_playback_state state){
 
 	if(state.frame == states[current_state].frame){
 		states[current_state] = state;
-	} else if(states[current_state].zoom  != state.zoom  || 
-		  states[current_state].x     != state.x     ||
-		  states[current_state].y     != state.y     ||
-		  states[current_state].speed != state.speed ||
-		  states[current_state].cut   != state.cut){
+	} else if(states[current_state].size_x != state.size_x || 
+		  states[current_state].size_y != state.size_y ||
+		  states[current_state].x      != state.x      ||
+		  states[current_state].y      != state.y      ||
+		  states[current_state].speed  != state.speed  ||
+		  states[current_state].cut    != state.cut){
 		insert_state(state, current_state + 1);
 	}
 

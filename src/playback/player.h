@@ -18,7 +18,8 @@ enum termr_update_type{
 };
 
 struct termr_playback_state{
-	int zoom;
+	int size_x;
+	int size_y;
 	int x;
 	int y;
 	double speed;

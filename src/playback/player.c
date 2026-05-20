@@ -38,10 +38,12 @@ static char status[256] = {0};
 
 unsigned char paused = 0;
 struct termr_playback_state playback_state =
-	(struct termr_playback_state) {.zoom = 0, .x = 0, .y = 0, .speed = 1.0, .frame = 0, .cut = 0};
+	(struct termr_playback_state) {.size_x = 0, .size_y = 0, .x = 0, .y = 0, .speed = 1.0, .frame = 0, .cut = 0};
 
 static int term_size_x;
 static int term_size_y;
+
+int zoom = 0;
 
 unsigned char recording_playback = 0;
 unsigned char playing_playback_file = 0;
@@ -86,35 +88,41 @@ void display_status(){
 }
 
 void apply_state_changes(struct termr_playback_state state, struct termr_playback_state prev_state){
-	int zoom;
 	struct timespec ts;
 	struct timespec rem;
-
-	ts.tv_sec = 0;
-	//50ms
-	ts.tv_nsec = 50000000;
+	int prev_COLS;
 
 	termr_set_offset(state.x, state.y);
 
-	for(zoom = state.zoom; zoom < prev_state.zoom; zoom++){
-		zoom_out();
-		//Sleep for some time between each zoom
-		//so that each input by the virtual keyboard may be distinguished
-		if(zoom + 1 < prev_state.zoom){
-			while(nanosleep(&ts, &rem) == -1){
-				ts = rem;
-			}
-		}
-	}
+	while(COLS != state.size_x){
+		while(COLS < state.size_x){
+			zoom_out();
 
-	for(zoom = prev_state.zoom; zoom < state.zoom; zoom++){
-		zoom_in();
-		//Sleep for at least 25ms between each zoom
-		//so that each input by the virtual keyboard may be distinguished
-		if(zoom + 1 < state.zoom){
+			//Sleep for some time between each zoom
+			//so that each input by the virtual key press may be distinguished
+			ts.tv_sec = 0;
+			//50ms
+			ts.tv_nsec = 50000000;
+
 			while(nanosleep(&ts, &rem) == -1){
 				ts = rem;
 			}
+			termr_refresh();
+		}
+
+		while(COLS > state.size_x){
+			zoom_in();
+
+			//Sleep for some time between each zoom
+			//so that each input by the virtual key press may be distinguished
+			ts.tv_sec = 0;
+			//50ms
+			ts.tv_nsec = 50000000;
+
+			while(nanosleep(&ts, &rem) == -1){
+				ts = rem;
+			}
+			termr_refresh();
 		}
 	}
 }
@@ -124,9 +132,13 @@ int main(int argc, char **argv){
 	int key_press;
 	int do_refresh = 0;
 	struct termr_playback_state read_state;
+	int prev_COLS;
+	int prev_LINES;
 
 	init_virtkeys();
 	initscr();
+	prev_COLS = COLS;
+	prev_LINES = LINES;
 	if(!has_colors()){
 		endwin();
 		fprintf(stderr, "Error: the terminal does not support colors\n");
@@ -158,6 +170,9 @@ int main(int argc, char **argv){
 		fprintf(stderr, "Error: could not open file for reading\n");
 		return 1;
 	}
+
+	playback_state.size_x = COLS;
+	playback_state.size_y = LINES;
 
 	if(argc <= 1){
 		init_playback_states(playback_state);
@@ -251,15 +266,9 @@ int main(int argc, char **argv){
 					break;
 				case '(':
 					zoom_in();
-					playback_state.zoom++;
-					do_refresh = 1;
-					snprintf(status, 255, "Zoom in %d", playback_state.zoom);
 					break;
 				case ')':
 					zoom_out();
-					playback_state.zoom--;
-					do_refresh = 1;
-					snprintf(status, 255, "Zoom out %d", playback_state.zoom);
 					break;
 				case 'p':
 					playing_playback_file = !playing_playback_file;
@@ -285,6 +294,20 @@ int main(int argc, char **argv){
 						snprintf(status, 255, "End recording");
 					}
 					break;
+				case KEY_RESIZE:
+					playback_state.size_x = COLS;
+					playback_state.size_y = LINES;
+					if(COLS < prev_COLS){
+						zoom++;
+						snprintf(status, 255, "Zoom in %d", zoom);
+					} else {
+						zoom--;
+						snprintf(status, 255, "Zoom out %d", zoom);
+					}
+					prev_COLS = COLS;
+					prev_LINES = LINES;
+					do_refresh = 1;
+					break;
 			}
 		}
 
@@ -296,7 +319,9 @@ int main(int argc, char **argv){
 
 		if(playing_playback_file){
 			read_state = read_playback_state();
-			apply_state_changes(read_state, playback_state);
+			if(!read_state.cut){
+				apply_state_changes(read_state, playback_state);
+			}
 			playback_state = read_state;
 		}
 
@@ -307,7 +332,7 @@ int main(int argc, char **argv){
 		next_update = next_action();
 		execute_action(next_update);
 
-		if(do_refresh){
+		if(do_refresh && (!playing_playback_file || !playback_state.cut)){
 			termr_refresh();
 		}
 	} while(next_update != NONE);

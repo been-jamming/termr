@@ -22,6 +22,7 @@ static unsigned char *updates;
 static long current_update = 0;
 
 extern unsigned char paused;
+extern unsigned char playing_playback_file;
 extern struct termr_playback_state playback_state;
 
 long frame = 0;
@@ -128,7 +129,7 @@ void execute_action(unsigned char update_type){
 				global_attr = attr;
 				break;
 		}
-	} else {
+	} else if(!playback_state.cut){
 		clock_gettime(CLOCK_MONOTONIC, &current_time);
 		last_nanoseconds = get_nanoseconds(last_time);
 		current_nanoseconds = get_nanoseconds(current_time);
@@ -143,16 +144,18 @@ void execute_action(unsigned char update_type){
 	}
 
 	if(!paused && waiting){
-		clock_gettime(CLOCK_MONOTONIC, &current_time);
-		last_nanoseconds = get_nanoseconds(last_time);
-		current_nanoseconds = get_nanoseconds(current_time);
-		if(current_nanoseconds - last_nanoseconds < 25000000ULL/playback_state.speed){
-			sleep_time = (struct timespec) {.tv_sec = (25000000ULL/playback_state.speed - current_nanoseconds + last_nanoseconds)/1000000000ULL, .tv_nsec = (long long unsigned int) (25000000ULL/playback_state.speed - current_nanoseconds + last_nanoseconds)%1000000000ULL};
-			nanosleep(&sleep_time, NULL);
-			last_time.tv_sec = (last_nanoseconds + 25000000ULL/playback_state.speed)/1000000000ULL;
-			last_time.tv_nsec = (long long unsigned int) (last_nanoseconds + 25000000ULL/playback_state.speed)%1000000000ULL;
-		} else {
-			clock_gettime(CLOCK_MONOTONIC, &last_time);
+		if(!playback_state.cut || !playing_playback_file){
+			clock_gettime(CLOCK_MONOTONIC, &current_time);
+			last_nanoseconds = get_nanoseconds(last_time);
+			current_nanoseconds = get_nanoseconds(current_time);
+			if(current_nanoseconds - last_nanoseconds < 25000000ULL/playback_state.speed){
+				sleep_time = (struct timespec) {.tv_sec = (25000000ULL/playback_state.speed - current_nanoseconds + last_nanoseconds)/1000000000ULL, .tv_nsec = (long long unsigned int) (25000000ULL/playback_state.speed - current_nanoseconds + last_nanoseconds)%1000000000ULL};
+				nanosleep(&sleep_time, NULL);
+				last_time.tv_sec = (last_nanoseconds + 25000000ULL/playback_state.speed)/1000000000ULL;
+				last_time.tv_nsec = (long long unsigned int) (last_nanoseconds + 25000000ULL/playback_state.speed)%1000000000ULL;
+			} else {
+				clock_gettime(CLOCK_MONOTONIC, &last_time);
+			}
 		}
 
 		frame++;

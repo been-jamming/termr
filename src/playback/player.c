@@ -87,15 +87,35 @@ void display_status(){
 
 void apply_state_changes(struct termr_playback_state state, struct termr_playback_state prev_state){
 	int zoom;
+	struct timespec ts;
+	struct timespec rem;
+
+	ts.tv_sec = 0;
+	//50ms
+	ts.tv_nsec = 50000000;
 
 	termr_set_offset(state.x, state.y);
 
 	for(zoom = state.zoom; zoom < prev_state.zoom; zoom++){
 		zoom_out();
+		//Sleep for some time between each zoom
+		//so that each input by the virtual keyboard may be distinguished
+		if(zoom + 1 < prev_state.zoom){
+			while(nanosleep(&ts, &rem) == -1){
+				ts = rem;
+			}
+		}
 	}
 
 	for(zoom = prev_state.zoom; zoom < state.zoom; zoom++){
 		zoom_in();
+		//Sleep for at least 25ms between each zoom
+		//so that each input by the virtual keyboard may be distinguished
+		if(zoom + 1 < state.zoom){
+			while(nanosleep(&ts, &rem) == -1){
+				ts = rem;
+			}
+		}
 	}
 }
 
@@ -229,13 +249,13 @@ int main(int argc, char **argv){
 					do_refresh = 1;
 					snprintf(status, 255, "Move");
 					break;
-				case '+':
+				case '(':
 					zoom_in();
 					playback_state.zoom++;
 					do_refresh = 1;
 					snprintf(status, 255, "Zoom in %d", playback_state.zoom);
 					break;
-				case '-':
+				case ')':
 					zoom_out();
 					playback_state.zoom--;
 					do_refresh = 1;
@@ -301,3 +321,4 @@ int main(int argc, char **argv){
 	fclose(recording);
 	deinit_virtkeys();
 }
+

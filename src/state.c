@@ -41,9 +41,6 @@ void termr_advance_cursor(){
 	} else if(state.cursor_y < state.height - 1){
 		state.cursor_x = 0;
 		state.cursor_y++;
-	} else {
-		state.cursor_x = 0;
-		termr_scroll();
 	}
 }
 
@@ -140,5 +137,9 @@ void termr_refresh(){
 	}
 	move(state.cursor_y - state.offset_y, state.cursor_x - state.offset_x);
 	refresh();
+}
+
+chtype termr_mvinch(int y, int x){
+	return state.characters[x][y];
 }
 

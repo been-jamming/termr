@@ -64,8 +64,8 @@ static void print_bash_output(char *str){
 			//termr_erase();
 			termr_write_move(0, 0);
 		} else if(*str == '\n'){
-			termr_write_addch('\n', 0);
-			termr_newline();
+			//termr_write_addch('\n', 0);
+			termr_write_newline();
 		} else {
 			termr_write_addch(*str, 1);
 		}

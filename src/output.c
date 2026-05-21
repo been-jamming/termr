@@ -2,8 +2,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <ncurses.h>
+#include <unistd.h>
 #include "playback/player.h"
 #include "state.h"
+#include "output.h"
 
 extern FILE *output_file;
 extern int global_attr;
@@ -57,8 +59,21 @@ void termr_write_input(char c){
 }
 
 void termr_write_addch(char c, int do_print){
+	int prev_x;
+	int prev_y;
+
+	termr_getyx(&prev_y, &prev_x);
+
 	if(frame_count)
 		termr_output_frames();
+
+	if(prev_y >= LINES - 1 && prev_x >= COLS - 1){
+		//We need to manually scroll the terminal and make sure the operation is recorded.
+		//This ensures that printing a character is reversible.
+		termr_write_scroll();
+		termr_write_move(LINES - 2, COLS - 1);
+	}
+
 	fwrite(&c, sizeof(char), 1, output_file);
 	append_update_type(PRINT);
 	if(do_print){
@@ -81,6 +96,69 @@ void termr_write_move(short y, short x){
 	fwrite(&y, sizeof(short), 1, output_file);
 	append_update_type(CURSOR);
 	termr_move(y, x);
+}
+
+void termr_write_scroll(){
+	int prev_x, x;
+	int prev_y, y;
+	chtype c;
+	int prev_global_attr;
+
+	termr_getyx(&prev_y, &prev_x);
+	prev_global_attr = global_attr;
+
+	termr_write_move(0, 0);
+
+	for(y = 1; y < LINES - 1; y++){
+		for(x = 0; x < COLS; x++){
+			c = termr_mvinch(y, x);
+			termr_write_set_attr(c&~0xFF);
+			termr_write_addch(c&0xFF, 1);
+		}
+	}
+
+	for(x = 0; x < COLS - 1; x++){
+		c = termr_mvinch(y, x);
+		termr_write_set_attr(c&~0xFF);
+		termr_write_addch(c&0xFF, 1);
+	}
+
+	termr_write_set_attr(prev_global_attr);
+	for(x = 0; x < COLS; x++){
+		termr_write_addch(' ', 1);
+	}
+
+	termr_write_move(prev_y, prev_x);
+}
+
+void termr_write_advance_cursor(){
+	int prev_x;
+	int prev_y;
+
+	termr_getyx(&prev_y, &prev_x);
+
+	if(prev_x < COLS - 1){
+		termr_write_move(prev_y, prev_x + 1);
+	} else if(prev_y < LINES - 1){
+		termr_write_move(prev_y + 1, 0);
+	} else {
+		termr_write_move(prev_y, 0);
+		termr_write_scroll();
+	}
+}
+
+void termr_write_newline(){
+	int prev_x;
+	int prev_y;
+
+	termr_getyx(&prev_y, &prev_x);
+
+	if(prev_y < LINES - 1){
+		termr_write_move(prev_y + 1, 0);
+	} else {
+		termr_write_move(prev_y, 0);
+		termr_write_scroll();
+	}
 }
 
 void termr_write_clrtoeol(){

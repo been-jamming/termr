@@ -20,4 +20,5 @@ void termr_erase();
 void termr_clrtoeol();
 void termr_refresh();
 void termr_set_offset(int offset_x, int offset_y);
+chtype termr_mvinch(int y, int x);
 

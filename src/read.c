@@ -38,11 +38,7 @@ static void print_bash_char(char c){
 	int y;
 	int x;
 
-	if(c == '\n'){
-		termr_newline();
-	} else {
-		termr_addch(c);
-	}
+	termr_addch(c);
 }
 
 int check_header(int *term_size_x, int *term_size_y){
@@ -92,10 +88,16 @@ unsigned char next_action(){
 void execute_action(unsigned char update_type){
 	int frame_count = 0;
 	unsigned char frame_count_char;
-	char character = '\0';
+	signed char char_diff;
+	signed char prev_char;
+	char character;
+	int prev_x;
+	int prev_y;
+	short cursor_x_diff;
+	short cursor_y_diff;
 	short cursor_x;
 	short cursor_y;
-	int attr;
+	int attr_diff;
 
 	if(!paused){
 		switch(update_type){
@@ -116,17 +118,23 @@ void execute_action(unsigned char update_type){
 			case INPUT:
 				break;
 			case PRINT:
-				fread(&character, sizeof(char), 1, recording);
+				fread(&char_diff, sizeof(char), 1, recording);
+				termr_getyx(&prev_y, &prev_x);
+				prev_char = termr_mvinch(prev_y, prev_x)&0x7F;
+				character = prev_char + char_diff;
 				print_bash_char(character);
 				break;
 			case CURSOR:
-				fread(&cursor_x, sizeof(short), 1, recording);
-				fread(&cursor_y, sizeof(short), 1, recording);
+				fread(&cursor_x_diff, sizeof(short), 1, recording);
+				fread(&cursor_y_diff, sizeof(short), 1, recording);
+				termr_getyx(&prev_y, &prev_x);
+				cursor_x = prev_x + cursor_x_diff;
+				cursor_y = prev_y + cursor_y_diff;
 				termr_move(cursor_y, cursor_x);
 				break;
 			case ATTR:
-				fread(&attr, sizeof(int), 1, recording);
-				global_attr = attr;
+				fread(&attr_diff, sizeof(int), 1, recording);
+				global_attr += attr_diff;
 				break;
 		}
 	} else if(!playback_state.cut){

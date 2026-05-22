@@ -61,39 +61,59 @@ void termr_write_input(char c){
 void termr_write_addch(char c, int do_print){
 	int prev_x;
 	int prev_y;
+	chtype prev_char;
+	signed char diff;
 
-	termr_getyx(&prev_y, &prev_x);
+	//Only do anything if c is a visible character
+	if(c >= ' ' && c <= '~'){
+		termr_getyx(&prev_y, &prev_x);
+		prev_char = termr_mvinch(prev_y, prev_x);
+		diff = (signed char) c - (signed char) (prev_char&0x7F);
 
-	if(frame_count)
-		termr_output_frames();
+		if(frame_count)
+			termr_output_frames();
 
-	if(prev_y >= LINES - 1 && prev_x >= COLS - 1){
-		//We need to manually scroll the terminal and make sure the operation is recorded.
-		//This ensures that printing a character is reversible.
-		termr_write_scroll();
-		termr_write_move(LINES - 2, COLS - 1);
-	}
+		if(prev_y >= LINES - 1 && prev_x >= COLS - 1){
+			//We need to manually scroll the terminal and make sure the operation is recorded.
+			//This ensures that printing a character is reversible.
+			termr_write_scroll();
+			termr_write_move(LINES - 2, COLS - 1);
+		}
 
-	fwrite(&c, sizeof(char), 1, output_file);
-	append_update_type(PRINT);
-	if(do_print){
-		termr_addch(c);
+		fwrite(&diff, sizeof(char), 1, output_file);
+		append_update_type(PRINT);
+		if(do_print){
+			termr_addch(c);
+		}
 	}
 }
 
 void termr_write_set_attr(int new_attr){
+	int diff;
+
+	diff = new_attr - global_attr;
+
 	if(frame_count)
 		termr_output_frames();
-	fwrite(&new_attr, sizeof(int), 1, output_file);
+	fwrite(&diff, sizeof(int), 1, output_file);
 	append_update_type(ATTR);
 	global_attr = new_attr;
 }
 
 void termr_write_move(short y, short x){
+	int prev_x;
+	int prev_y;
+	short diff_x;
+	short diff_y;
+
+	termr_getyx(&prev_y, &prev_x);
+	diff_x = x - prev_x;
+	diff_y = y - prev_y;
+
 	if(frame_count)
 		termr_output_frames();
-	fwrite(&x, sizeof(short), 1, output_file);
-	fwrite(&y, sizeof(short), 1, output_file);
+	fwrite(&diff_x, sizeof(short), 1, output_file);
+	fwrite(&diff_y, sizeof(short), 1, output_file);
 	append_update_type(CURSOR);
 	termr_move(y, x);
 }
@@ -161,6 +181,9 @@ void termr_write_newline(){
 	}
 }
 
+//I don't believe this functions is used.
+//besides, the implementation is wrong.
+//can't go to end of line if on the last line in the terminal
 void termr_write_clrtoeol(){
 	int cursor_x;
 	int cursor_y;

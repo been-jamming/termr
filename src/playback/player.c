@@ -37,6 +37,7 @@ extern long frame;
 static char status[256] = {0};
 
 unsigned char paused = 0;
+unsigned char backwards = 0;
 struct termr_playback_state playback_state =
 	(struct termr_playback_state) {.size_x = 0, .size_y = 0, .x = 0, .y = 0, .speed = 1.0, .frame = 0, .cut = 0};
 
@@ -48,6 +49,9 @@ int zoom = 0;
 unsigned char recording_playback = 0;
 unsigned char playing_playback_file = 0;
 FILE *termrp_file = NULL;
+
+extern long current_update;
+extern unsigned char waiting;
 
 static int open_recording(char *filename){
 	recording = fopen(filename, "rb");
@@ -134,6 +138,8 @@ int main(int argc, char **argv){
 	struct termr_playback_state read_state;
 	int prev_COLS;
 	int prev_LINES;
+	int do_frame = 0;
+	unsigned char dummy;
 
 	init_virtkeys();
 	initscr();
@@ -308,6 +314,28 @@ int main(int argc, char **argv){
 					prev_LINES = LINES;
 					do_refresh = 1;
 					break;
+				case 'b':
+					backwards = !backwards;
+					if(backwards){
+						snprintf(status, 255, "Backwards playback");
+						current_update--;
+						if(waiting){
+							fread_backwards(&dummy, sizeof(unsigned char), 1, recording);
+						}
+					} else {
+						snprintf(status, 255, "Forwards playback");
+						current_update++;
+						if(waiting){
+							fread(&dummy, sizeof(unsigned char), 1, recording);
+						}
+					}
+					break;
+				case 'f':
+					do_frame = 1;
+					paused = 0;
+					do_refresh = 1;
+					snprintf(status, 255, "Single frame");
+					break;
 			}
 		}
 
@@ -329,11 +357,22 @@ int main(int argc, char **argv){
 			display_status();
 		}
 
-		next_update = next_action();
-		execute_action(next_update);
+		if(!backwards){
+			next_update = next_action();
+			execute_action(next_update);
+		}
+		if(backwards){
+			execute_action_backwards(next_update);
+			next_action_backwards();
+		}
 
 		if(do_refresh && (!playing_playback_file || !playback_state.cut)){
 			termr_refresh();
+		}
+
+		if(do_frame){
+			do_frame == 0;
+			paused = 1;
 		}
 	} while(next_update != NONE);
 

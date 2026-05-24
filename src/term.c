@@ -16,6 +16,8 @@
 int open_terminal();
 FILE *debug_file = NULL;
 FILE *output_file = NULL;
+char *output_file_name = "termr_output";
+char *debug_file_name = NULL;
 int do_ctrl_c = 0;
 int in_escape_sequence = 0;
 int red_background;
@@ -97,6 +99,35 @@ void ctrl_c(int sig){
 	do_ctrl_c = 1;
 }
 
+static void parse_arguments(int argc, char **argv){
+	int opt;
+
+	while((opt = getopt(argc, argv, "o:d:h")) != -1){
+		switch(opt){
+			case 'o':
+				if(!optarg || !optarg[0]){
+					fprintf(stderr, "Error: expected output file name after argument 'o'\n");
+					exit(1);
+				} else {
+					output_file_name = optarg;
+				}
+				break;
+			case 'd':
+				if(!optarg || !optarg[0]){
+					fprintf(stderr, "Error: expected debug file name after argument 'd'\n");
+					exit(1);
+				} else {
+					debug_file_name = optarg;
+				}
+				break;
+			case 'h':
+				printf("Usage: termr [-o output_file] [-d debug_file]\n");
+				exit(0);
+				break;
+		}
+	}
+}
+
 int main(int argc, char **argv){
 	char buffer[8192] = {0};
 	int key_press;
@@ -112,12 +143,8 @@ int main(int argc, char **argv){
 	struct timeval no_wait;
 	sigset_t block_sigint;
 
-	if(argc >= 2 && !strcmp(argv[1], "--debug")){
-		printf("Opening in debug mode\n");
-		debug_file = fopen("termr_debug", "w");
-	}
-
-	output_file = fopen("test", "wb");
+	parse_arguments(argc, argv);
+	output_file = fopen(output_file_name, "wb");
 
 	sigint_action.sa_handler = ctrl_c;
 	sigint_action.sa_flags = 0;

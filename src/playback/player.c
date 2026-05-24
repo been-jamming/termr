@@ -4,6 +4,7 @@
 #include <string.h>
 #include <ncurses.h>
 #include <time.h>
+#include <unistd.h>
 #include "player.h"
 #include "../read.h"
 #include "../state.h"
@@ -52,6 +53,10 @@ FILE *termrp_file = NULL;
 
 extern long current_update;
 extern unsigned char waiting;
+
+char *playback_file_name = NULL;
+char *recording_file_name = NULL;
+char *output_file_name = NULL;
 
 static uint64_t get_nanoseconds(struct timespec t){
 	return 1000000000ULL*t.tv_sec + t.tv_nsec;
@@ -135,6 +140,40 @@ void apply_state_changes(struct termr_playback_state state, struct termr_playbac
 	}
 }
 
+static void parse_arguments(int argc, char **argv){
+	int opt;
+
+	while((opt = getopt(argc, argv, "o:p:h")) != -1){
+		switch(opt){
+			case 'o':
+				if(!optarg || !optarg[0]){
+					fprintf(stderr, "Error: expected output file name after argument 'o'\n");
+					exit(1);
+				}
+				output_file_name = optarg;
+				break;
+			case 'p':
+				if(!optarg || !optarg[0]){
+					fprintf(stderr, "Error: expected playback file name after argument 'p'\n");
+					exit(1);
+				}
+				playback_file_name = optarg;
+				break;
+			case 'h':
+				printf("Usage: termr_player [-o output_file] [-p playback_file] recording_file\n");
+				exit(0);
+				break;
+		}
+	}
+
+	if(optind < argc){
+		recording_file_name = argv[optind];
+	} else {
+		fprintf(stderr, "Error: expected recording file name\n");
+		exit(1);
+	}
+}
+
 int main(int argc, char **argv){
 	unsigned char next_update;
 	int key_press;
@@ -144,6 +183,8 @@ int main(int argc, char **argv){
 	int prev_LINES;
 	int do_frame = 0;
 	unsigned char dummy;
+
+	parse_arguments(argc, argv);
 
 	init_virtkeys();
 	initscr();
@@ -175,21 +216,27 @@ int main(int argc, char **argv){
 		green_background = COLOR_GREEN;
 	}
 
-	if(open_recording("test")){
+	if(open_recording(recording_file_name)){
 		endwin();
-		fprintf(stderr, "Error: could not open file for reading\n");
+		fprintf(stderr, "Error: could not open recording file for reading\n");
 		return 1;
 	}
 
 	playback_state.size_x = COLS;
 	playback_state.size_y = LINES;
 
-	if(argc <= 1){
-		init_playback_states(playback_state);
+	if(playback_file_name){
+		termrp_file = fopen(playback_file_name, "rb");
+		if(termrp_file){
+			read_playback_file(termrp_file);
+			fclose(termrp_file);
+		} else {
+			endwin();
+			fprintf(stderr, "Error: failed to read playback file\n");
+			exit(1);
+		}
 	} else {
-		termrp_file = fopen("test.termrp", "rb");
-		read_playback_file(termrp_file);
-		fclose(termrp_file);
+		init_playback_states(playback_state);
 	}
 
 	if(check_header(&term_size_x, &term_size_y)){
@@ -393,9 +440,17 @@ int main(int argc, char **argv){
 		}
 	} while(next_update != NONE);
 
-	termrp_file = fopen("test.termrp", "wb");
-	write_playback_file(termrp_file);
-	fclose(termrp_file);
+	if(output_file_name){
+		termrp_file = fopen(output_file_name, "wb");
+		if(termrp_file){
+			write_playback_file(termrp_file);
+			fclose(termrp_file);
+		} else {
+			endwin();
+			fprintf(stderr, "Error: failed to write playback file\n");
+			exit(1);
+		}
+	}
 
 	fclose(debug_file);
 	endwin();

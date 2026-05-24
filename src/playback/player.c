@@ -53,6 +53,10 @@ FILE *termrp_file = NULL;
 extern long current_update;
 extern unsigned char waiting;
 
+static uint64_t get_nanoseconds(struct timespec t){
+	return 1000000000ULL*t.tv_sec + t.tv_nsec;
+}
+
 static int open_recording(char *filename){
 	recording = fopen(filename, "rb");
 
@@ -105,8 +109,8 @@ void apply_state_changes(struct termr_playback_state state, struct termr_playbac
 			//Sleep for some time between each zoom
 			//so that each input by the virtual key press may be distinguished
 			ts.tv_sec = 0;
-			//50ms
-			ts.tv_nsec = 50000000;
+			//10ms
+			ts.tv_nsec = 10000000;
 
 			while(nanosleep(&ts, &rem) == -1){
 				ts = rem;
@@ -120,8 +124,8 @@ void apply_state_changes(struct termr_playback_state state, struct termr_playbac
 			//Sleep for some time between each zoom
 			//so that each input by the virtual key press may be distinguished
 			ts.tv_sec = 0;
-			//50ms
-			ts.tv_nsec = 50000000;
+			//10ms
+			ts.tv_nsec = 10000000;
 
 			while(nanosleep(&ts, &rem) == -1){
 				ts = rem;
@@ -341,38 +345,51 @@ int main(int argc, char **argv){
 
 		playback_state.frame = frame;
 
-		if(recording_playback){
-			write_playback_state(playback_state);
-		}
-
-		if(playing_playback_file){
-			read_state = read_playback_state();
-			if(!read_state.cut){
-				apply_state_changes(read_state, playback_state);
-			}
-			playback_state = read_state;
-		}
-
 		if(paused){
 			display_status();
-		}
+			//Sleep for a frame
+			clock_gettime(CLOCK_MONOTONIC, &current_time);
+			last_nanoseconds = get_nanoseconds(last_time);
+			current_nanoseconds = get_nanoseconds(current_time);
+			if(current_nanoseconds - last_nanoseconds < 25000000ULL/playback_state.speed){
+				sleep_time = (struct timespec) {.tv_sec = (25000000ULL/playback_state.speed - current_nanoseconds + last_nanoseconds)/1000000000ULL, .tv_nsec = (long long unsigned int) (25000000ULL/playback_state.speed - current_nanoseconds + last_nanoseconds)%1000000000ULL};
+				nanosleep(&sleep_time, NULL);
+				last_time.tv_sec = (last_nanoseconds + 25000000ULL/playback_state.speed)/1000000000ULL;
+				last_time.tv_nsec = (long long unsigned int) (last_nanoseconds + 25000000ULL/playback_state.speed)%1000000000ULL;
+			} else {
+				clock_gettime(CLOCK_MONOTONIC, &last_time);
+			}
+		} else {
+			if(recording_playback){
+				write_playback_state(playback_state);
+			}
 
-		if(!backwards){
-			next_update = next_action();
-			execute_action(next_update);
-		}
-		if(backwards){
-			execute_action_backwards(next_update);
-			next_update = next_action_backwards();
-		}
+			if(playing_playback_file){
+				read_state = read_playback_state();
+				if(!read_state.cut){
+					apply_state_changes(read_state, playback_state);
+				}
+				playback_state = read_state;
+			}
 
-		if(do_refresh && (!playing_playback_file || !playback_state.cut)){
-			termr_refresh();
-		}
 
-		if(do_frame){
-			do_frame == 0;
-			paused = 1;
+			if(!backwards){
+				next_update = next_action();
+				execute_action(next_update);
+			}
+			if(backwards){
+				execute_action_backwards(next_update);
+				next_update = next_action_backwards();
+			}
+
+			if(do_refresh && (!playing_playback_file || !playback_state.cut)){
+				termr_refresh();
+			}
+
+			if(do_frame){
+				do_frame == 0;
+				paused = 1;
+			}
 		}
 	} while(next_update != NONE);
 

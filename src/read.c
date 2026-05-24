@@ -130,66 +130,52 @@ void execute_action(unsigned char update_type){
 	short cursor_y;
 	int attr_diff;
 
-	if(!paused){
-		switch(update_type){
-			case NONE:
-				break;
-			case NEXT_FRAME:
-				if(!waiting){
-					fread(&frame_count_char, sizeof(unsigned char), 1, recording);
-					duration = frame_count_char;
-					if(duration == 0)
-						duration = 256;
-					frame_start = frame;
+	switch(update_type){
+		case NONE:
+			break;
+		case NEXT_FRAME:
+			if(!waiting){
+				fread(&frame_count_char, sizeof(unsigned char), 1, recording);
+				duration = frame_count_char;
+				if(duration == 0)
+					duration = 256;
+				frame_start = frame;
 
-					termr_refresh();
-					waiting = 1;
-				}
-				break;
-			case INPUT:
-				break;
-			case PRINT:
-				fread(&char_diff, sizeof(signed char), 1, recording);
-				termr_getyx(&prev_y, &prev_x);
-				prev_chtype = termr_mvinch(prev_y, prev_x);
-				prev_char = prev_chtype&0x7F;
-				character = prev_char + char_diff;
-				global_attr = prev_chtype&~0x7F;
-				print_bash_char(character);
-				break;
-			case PRINT_ATTR:
-				fread(&all_diff, sizeof(chtype), 1, recording);
-				termr_getyx(&prev_y, &prev_x);
-				prev_chtype = termr_mvinch(prev_y, prev_x);
-				next_chtype = prev_chtype + all_diff;
-				character = next_chtype&0x7F;
-				global_attr = next_chtype&~0x7F;
-				print_bash_char(character);
-				break;
-			case CURSOR:
-				fread(&cursor_x_diff, sizeof(short), 1, recording);
-				fread(&cursor_y_diff, sizeof(short), 1, recording);
-				termr_getyx(&prev_y, &prev_x);
-				cursor_x = prev_x + cursor_x_diff;
-				cursor_y = prev_y + cursor_y_diff;
-				termr_move(cursor_y, cursor_x);
-				break;
-		}
-	} else if(!playback_state.cut){
-		clock_gettime(CLOCK_MONOTONIC, &current_time);
-		last_nanoseconds = get_nanoseconds(last_time);
-		current_nanoseconds = get_nanoseconds(current_time);
-		if(current_nanoseconds - last_nanoseconds < 25000000ULL){
-			sleep_time = (struct timespec) {.tv_sec = (25000000ULL - current_nanoseconds + last_nanoseconds)/1000000000ULL, .tv_nsec = (25000000ULL - current_nanoseconds + last_nanoseconds)%1000000000ULL};
-			nanosleep(&sleep_time, NULL);
-			last_time.tv_sec = (last_nanoseconds + 25000000ULL)/1000000000ULL;
-			last_time.tv_nsec = (last_nanoseconds + 25000000ULL)%1000000000ULL;
-		} else {
-			clock_gettime(CLOCK_MONOTONIC, &last_time);
-		}
+				termr_refresh();
+				waiting = 1;
+			}
+			break;
+		case INPUT:
+			break;
+		case PRINT:
+			fread(&char_diff, sizeof(signed char), 1, recording);
+			termr_getyx(&prev_y, &prev_x);
+			prev_chtype = termr_mvinch(prev_y, prev_x);
+			prev_char = prev_chtype&0x7F;
+			character = prev_char + char_diff;
+			global_attr = prev_chtype&~0x7F;
+			print_bash_char(character);
+			break;
+		case PRINT_ATTR:
+			fread(&all_diff, sizeof(chtype), 1, recording);
+			termr_getyx(&prev_y, &prev_x);
+			prev_chtype = termr_mvinch(prev_y, prev_x);
+			next_chtype = prev_chtype + all_diff;
+			character = next_chtype&0x7F;
+			global_attr = next_chtype&~0x7F;
+			print_bash_char(character);
+			break;
+		case CURSOR:
+			fread(&cursor_x_diff, sizeof(short), 1, recording);
+			fread(&cursor_y_diff, sizeof(short), 1, recording);
+			termr_getyx(&prev_y, &prev_x);
+			cursor_x = prev_x + cursor_x_diff;
+			cursor_y = prev_y + cursor_y_diff;
+			termr_move(cursor_y, cursor_x);
+			break;
 	}
 
-	if(!paused && waiting){
+	if(waiting){
 		if(!playback_state.cut || !playing_playback_file){
 			clock_gettime(CLOCK_MONOTONIC, &current_time);
 			last_nanoseconds = get_nanoseconds(last_time);
@@ -230,82 +216,68 @@ void execute_action_backwards(unsigned char update_type){
 	int width;
 	int height;
 
-	if(!paused){
-		switch(update_type){
-			case NONE:
-				break;
-			case NEXT_FRAME:
-				if(!waiting){
-					fread_backwards(&frame_count_char, sizeof(unsigned char), 1, recording);
-					duration = frame_count_char;
-					if(duration == 0)
-						duration = 256;
-					frame_start = frame - duration;
+	switch(update_type){
+		case NONE:
+			break;
+		case NEXT_FRAME:
+			if(!waiting){
+				fread_backwards(&frame_count_char, sizeof(unsigned char), 1, recording);
+				duration = frame_count_char;
+				if(duration == 0)
+					duration = 256;
+				frame_start = frame - duration;
 
-					termr_refresh();
-					waiting = 1;
-				}
-				break;
-			case INPUT:
-				break;
-			case PRINT:
-				fread_backwards(&char_diff, sizeof(signed char), 1, recording);
-				termr_getyx(&prev_y, &prev_x);
-				termr_size(&width, &height);
-				if(prev_x == 0){
-					prev_y--;
-					prev_x = width - 1;
-				} else {
-					prev_x--;
-				}
-				termr_move(prev_y, prev_x);
-				prev_chtype = termr_mvinch(prev_y, prev_x);
-				prev_char = prev_chtype&0x7F;
-				character = prev_char - char_diff;
-				global_attr = prev_chtype&~0x7F;
-				termr_putch(character);
-				break;
-			case PRINT_ATTR:
-				fread_backwards(&all_diff, sizeof(chtype), 1, recording);
-				termr_getyx(&prev_y, &prev_x);
-				termr_size(&width, &height);
-				if(prev_x == 0){
-					prev_y--;
-					prev_x = width - 1;
-				} else {
-					prev_x--;
-				}
-				termr_move(prev_y, prev_x);
-				prev_chtype = termr_mvinch(prev_y, prev_x);
-				next_chtype = prev_chtype - all_diff;
-				character = next_chtype&0x7F;
-				global_attr = next_chtype&~0x7F;
-				termr_putch(character);
-				break;
-			case CURSOR:
-				fread_backwards(&cursor_y_diff, sizeof(short), 1, recording);
-				fread_backwards(&cursor_x_diff, sizeof(short), 1, recording);
-				termr_getyx(&prev_y, &prev_x);
-				cursor_x = prev_x - cursor_x_diff;
-				cursor_y = prev_y - cursor_y_diff;
-				termr_move(cursor_y, cursor_x);
-				break;
-		}
-	} else if(!playback_state.cut){
-		clock_gettime(CLOCK_MONOTONIC, &current_time);
-		last_nanoseconds = get_nanoseconds(last_time);
-		current_nanoseconds = get_nanoseconds(current_time);
-		if(current_nanoseconds - last_nanoseconds < 25000000ULL){
-			sleep_time = (struct timespec) {.tv_sec = (25000000ULL - current_nanoseconds + last_nanoseconds)/1000000000ULL, .tv_nsec = (25000000ULL - current_nanoseconds + last_nanoseconds)%1000000000ULL};
-			nanosleep(&sleep_time, NULL);
-			last_time.tv_sec = (last_nanoseconds + 25000000ULL)/1000000000ULL;
-			last_time.tv_nsec = (last_nanoseconds + 25000000ULL)%1000000000ULL;
-		} else {
-			clock_gettime(CLOCK_MONOTONIC, &last_time);
-		}
+				termr_refresh();
+				waiting = 1;
+			}
+			break;
+		case INPUT:
+			break;
+		case PRINT:
+			fread_backwards(&char_diff, sizeof(signed char), 1, recording);
+			termr_getyx(&prev_y, &prev_x);
+			termr_size(&width, &height);
+			if(prev_x == 0){
+				prev_y--;
+				prev_x = width - 1;
+			} else {
+				prev_x--;
+			}
+			termr_move(prev_y, prev_x);
+			prev_chtype = termr_mvinch(prev_y, prev_x);
+			prev_char = prev_chtype&0x7F;
+			character = prev_char - char_diff;
+			global_attr = prev_chtype&~0x7F;
+			termr_putch(character);
+			break;
+		case PRINT_ATTR:
+			fread_backwards(&all_diff, sizeof(chtype), 1, recording);
+			termr_getyx(&prev_y, &prev_x);
+			termr_size(&width, &height);
+			if(prev_x == 0){
+				prev_y--;
+				prev_x = width - 1;
+			} else {
+				prev_x--;
+			}
+			termr_move(prev_y, prev_x);
+			prev_chtype = termr_mvinch(prev_y, prev_x);
+			next_chtype = prev_chtype - all_diff;
+			character = next_chtype&0x7F;
+			global_attr = next_chtype&~0x7F;
+			termr_putch(character);
+			break;
+		case CURSOR:
+			fread_backwards(&cursor_y_diff, sizeof(short), 1, recording);
+			fread_backwards(&cursor_x_diff, sizeof(short), 1, recording);
+			termr_getyx(&prev_y, &prev_x);
+			cursor_x = prev_x - cursor_x_diff;
+			cursor_y = prev_y - cursor_y_diff;
+			termr_move(cursor_y, cursor_x);
+			break;
 	}
 
-	if(!paused && waiting){
+	if(waiting){
 		if(!playback_state.cut || !playing_playback_file){
 			clock_gettime(CLOCK_MONOTONIC, &current_time);
 			last_nanoseconds = get_nanoseconds(last_time);

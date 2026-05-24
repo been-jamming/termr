@@ -434,7 +434,7 @@ int main(int argc, char **argv){
 			}
 
 			if(do_frame){
-				do_frame == 0;
+				do_frame = 0;
 				paused = 1;
 			}
 		}

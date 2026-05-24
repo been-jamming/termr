@@ -363,7 +363,7 @@ int main(int argc, char **argv){
 		}
 		if(backwards){
 			execute_action_backwards(next_update);
-			next_action_backwards();
+			next_update = next_action_backwards();
 		}
 
 		if(do_refresh && (!playing_playback_file || !playback_state.cut)){

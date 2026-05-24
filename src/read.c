@@ -118,6 +118,9 @@ void execute_action(unsigned char update_type){
 	unsigned char frame_count_char;
 	signed char char_diff;
 	signed char prev_char;
+	chtype prev_chtype;
+	chtype all_diff;
+	chtype next_chtype;
 	char character;
 	int prev_x;
 	int prev_y;
@@ -148,8 +151,19 @@ void execute_action(unsigned char update_type){
 			case PRINT:
 				fread(&char_diff, sizeof(signed char), 1, recording);
 				termr_getyx(&prev_y, &prev_x);
-				prev_char = termr_mvinch(prev_y, prev_x)&0x7F;
+				prev_chtype = termr_mvinch(prev_y, prev_x);
+				prev_char = prev_chtype&0x7F;
 				character = prev_char + char_diff;
+				global_attr = prev_chtype&~0x7F;
+				print_bash_char(character);
+				break;
+			case PRINT_ATTR:
+				fread(&all_diff, sizeof(chtype), 1, recording);
+				termr_getyx(&prev_y, &prev_x);
+				prev_chtype = termr_mvinch(prev_y, prev_x);
+				next_chtype = prev_chtype + all_diff;
+				character = next_chtype&0x7F;
+				global_attr = next_chtype&~0x7F;
 				print_bash_char(character);
 				break;
 			case CURSOR:
@@ -159,10 +173,6 @@ void execute_action(unsigned char update_type){
 				cursor_x = prev_x + cursor_x_diff;
 				cursor_y = prev_y + cursor_y_diff;
 				termr_move(cursor_y, cursor_x);
-				break;
-			case ATTR:
-				fread(&attr_diff, sizeof(int), 1, recording);
-				global_attr += attr_diff;
 				break;
 		}
 	} else if(!playback_state.cut){
@@ -206,6 +216,9 @@ void execute_action_backwards(unsigned char update_type){
 	unsigned char frame_count_char;
 	signed char char_diff;
 	signed char prev_char;
+	chtype prev_chtype;
+	chtype all_diff;
+	chtype next_chtype;
 	char character;
 	int prev_x;
 	int prev_y;
@@ -214,6 +227,8 @@ void execute_action_backwards(unsigned char update_type){
 	short cursor_x;
 	short cursor_y;
 	int attr_diff;
+	int width;
+	int height;
 
 	if(!paused){
 		switch(update_type){
@@ -236,15 +251,35 @@ void execute_action_backwards(unsigned char update_type){
 			case PRINT:
 				fread_backwards(&char_diff, sizeof(signed char), 1, recording);
 				termr_getyx(&prev_y, &prev_x);
+				termr_size(&width, &height);
 				if(prev_x == 0){
 					prev_y--;
-					prev_x = COLS - 1;
+					prev_x = width - 1;
 				} else {
 					prev_x--;
 				}
 				termr_move(prev_y, prev_x);
-				prev_char = termr_mvinch(prev_y, prev_x)&0x7F;
+				prev_chtype = termr_mvinch(prev_y, prev_x);
+				prev_char = prev_chtype&0x7F;
 				character = prev_char - char_diff;
+				global_attr = prev_chtype&~0x7F;
+				termr_putch(character);
+				break;
+			case PRINT_ATTR:
+				fread_backwards(&all_diff, sizeof(chtype), 1, recording);
+				termr_getyx(&prev_y, &prev_x);
+				termr_size(&width, &height);
+				if(prev_x == 0){
+					prev_y--;
+					prev_x = width - 1;
+				} else {
+					prev_x--;
+				}
+				termr_move(prev_y, prev_x);
+				prev_chtype = termr_mvinch(prev_y, prev_x);
+				next_chtype = prev_chtype - all_diff;
+				character = next_chtype&0x7F;
+				global_attr = next_chtype&~0x7F;
 				termr_putch(character);
 				break;
 			case CURSOR:
@@ -254,10 +289,6 @@ void execute_action_backwards(unsigned char update_type){
 				cursor_x = prev_x - cursor_x_diff;
 				cursor_y = prev_y - cursor_y_diff;
 				termr_move(cursor_y, cursor_x);
-				break;
-			case ATTR:
-				fread_backwards(&attr_diff, sizeof(int), 1, recording);
-				global_attr -= attr_diff;
 				break;
 		}
 	} else if(!playback_state.cut){

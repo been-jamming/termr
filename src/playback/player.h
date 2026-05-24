@@ -14,7 +14,7 @@ enum termr_update_type{
 	INPUT = 2,
 	PRINT = 3,
 	CURSOR = 4,
-	ATTR = 5
+	PRINT_ATTR = 5
 };
 
 struct termr_playback_state{

@@ -143,3 +143,8 @@ chtype termr_mvinch(int y, int x){
 	return state.characters[x][y];
 }
 
+void termr_size(int *width, int *height){
+	*width = state.width;
+	*height = state.height;
+}
+

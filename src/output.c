@@ -63,12 +63,16 @@ void termr_write_addch(char c, int do_print){
 	int prev_y;
 	chtype prev_char;
 	signed char diff;
+	chtype attr_diff;
+	chtype all_diff;
 
 	//Only do anything if c is a visible character
 	if(c >= ' ' && c <= '~'){
 		termr_getyx(&prev_y, &prev_x);
 		prev_char = termr_mvinch(prev_y, prev_x);
 		diff = (signed char) c - (signed char) (prev_char&0x7F);
+		attr_diff = global_attr - prev_char&~0x7F;
+		all_diff = ((chtype) c | global_attr) - prev_char;
 
 		if(frame_count)
 			termr_output_frames();
@@ -80,24 +84,20 @@ void termr_write_addch(char c, int do_print){
 			termr_write_move(LINES - 2, COLS - 1);
 		}
 
-		fwrite(&diff, sizeof(char), 1, output_file);
-		append_update_type(PRINT);
+		if(attr_diff == 0){
+			//If the character has the same attribute, use the PRINT update type
+			fwrite(&diff, sizeof(char), 1, output_file);
+			append_update_type(PRINT);
+		} else {
+			//If the character has different attributes, use the PRINT_ATTR update type
+			fwrite(&all_diff, sizeof(chtype), 1, output_file);
+			append_update_type(PRINT_ATTR);
+		}
+
 		if(do_print){
 			termr_addch(c);
 		}
 	}
-}
-
-void termr_write_set_attr(int new_attr){
-	int diff;
-
-	diff = new_attr - global_attr;
-
-	if(frame_count)
-		termr_output_frames();
-	fwrite(&diff, sizeof(int), 1, output_file);
-	append_update_type(ATTR);
-	global_attr = new_attr;
 }
 
 void termr_write_move(short y, short x){
@@ -132,18 +132,21 @@ void termr_write_scroll(){
 	for(y = 1; y < LINES - 1; y++){
 		for(x = 0; x < COLS; x++){
 			c = termr_mvinch(y, x);
-			termr_write_set_attr(c&~0xFF);
+			global_attr = c&~0xFF;
+			//termr_write_set_attr(c&~0xFF);
 			termr_write_addch(c&0xFF, 1);
 		}
 	}
 
 	for(x = 0; x < COLS - 1; x++){
 		c = termr_mvinch(y, x);
-		termr_write_set_attr(c&~0xFF);
+		global_attr = c&~0xFF;
+		//termr_write_set_attr(c&~0xFF);
 		termr_write_addch(c&0xFF, 1);
 	}
 
-	termr_write_set_attr(prev_global_attr);
+	global_attr = prev_global_attr;
+	//termr_write_set_attr(prev_global_attr);
 	for(x = 0; x < COLS; x++){
 		termr_write_addch(' ', 1);
 	}

@@ -5,6 +5,7 @@
 #include <time.h>
 #include <math.h>
 #include "playback/player.h"
+#include "playback/audio.h"
 #include "state.h"
 
 extern FILE *recording;
@@ -146,6 +147,8 @@ void execute_action(unsigned char update_type){
 			}
 			break;
 		case INPUT:
+			fread(&character, sizeof(char), 1, recording);
+			play_click();
 			break;
 		case PRINT:
 			fread(&char_diff, sizeof(signed char), 1, recording);
@@ -232,6 +235,7 @@ void execute_action_backwards(unsigned char update_type){
 			}
 			break;
 		case INPUT:
+			fread_backwards(&character, sizeof(char), 1, recording);
 			break;
 		case PRINT:
 			fread_backwards(&char_diff, sizeof(signed char), 1, recording);

@@ -224,6 +224,7 @@ int main(int argc, char **argv){
 					fprintf(stderr, "Error: Failed to write to terminal device\n");
 				}
 			}
+			termr_write_input(key_press&0x7F);
 		}
 		FD_ZERO(&readable);
 		FD_SET(pty_fd, &readable);

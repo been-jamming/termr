@@ -10,6 +10,7 @@
 #include "../state.h"
 #include "virtkeys.h"
 #include "playback_output.h"
+#include "audio.h"
 
 FILE *recording;
 static struct termr_header header;
@@ -187,6 +188,7 @@ int main(int argc, char **argv){
 	parse_arguments(argc, argv);
 
 	init_virtkeys();
+	init_audio();
 	initscr();
 	prev_COLS = COLS;
 	prev_LINES = LINES;
@@ -455,6 +457,7 @@ int main(int argc, char **argv){
 	fclose(debug_file);
 	endwin();
 	fclose(recording);
+	deinit_audio();
 	deinit_virtkeys();
 }
 

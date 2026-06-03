@@ -4,11 +4,13 @@
 #include <string.h>
 #include <ncurses.h>
 #include <time.h>
+#include <unistd.h>
 #include "player.h"
 #include "../read.h"
 #include "../state.h"
 #include "virtkeys.h"
 #include "playback_output.h"
+#include "audio.h"
 
 FILE *recording;
 static struct termr_header header;
@@ -37,6 +39,7 @@ extern long frame;
 static char status[256] = {0};
 
 unsigned char paused = 0;
+unsigned char backwards = 0;
 struct termr_playback_state playback_state =
 	(struct termr_playback_state) {.size_x = 0, .size_y = 0, .x = 0, .y = 0, .speed = 1.0, .frame = 0, .cut = 0};
 
@@ -48,6 +51,17 @@ int zoom = 0;
 unsigned char recording_playback = 0;
 unsigned char playing_playback_file = 0;
 FILE *termrp_file = NULL;
+
+extern long current_update;
+extern unsigned char waiting;
+
+char *playback_file_name = NULL;
+char *recording_file_name = NULL;
+char *output_file_name = NULL;
+
+static uint64_t get_nanoseconds(struct timespec t){
+	return 1000000000ULL*t.tv_sec + t.tv_nsec;
+}
 
 static int open_recording(char *filename){
 	recording = fopen(filename, "rb");
@@ -101,8 +115,8 @@ void apply_state_changes(struct termr_playback_state state, struct termr_playbac
 			//Sleep for some time between each zoom
 			//so that each input by the virtual key press may be distinguished
 			ts.tv_sec = 0;
-			//50ms
-			ts.tv_nsec = 50000000;
+			//10ms
+			ts.tv_nsec = 10000000;
 
 			while(nanosleep(&ts, &rem) == -1){
 				ts = rem;
@@ -116,14 +130,48 @@ void apply_state_changes(struct termr_playback_state state, struct termr_playbac
 			//Sleep for some time between each zoom
 			//so that each input by the virtual key press may be distinguished
 			ts.tv_sec = 0;
-			//50ms
-			ts.tv_nsec = 50000000;
+			//10ms
+			ts.tv_nsec = 10000000;
 
 			while(nanosleep(&ts, &rem) == -1){
 				ts = rem;
 			}
 			termr_refresh();
 		}
+	}
+}
+
+static void parse_arguments(int argc, char **argv){
+	int opt;
+
+	while((opt = getopt(argc, argv, "o:p:h")) != -1){
+		switch(opt){
+			case 'o':
+				if(!optarg || !optarg[0]){
+					fprintf(stderr, "Error: expected output file name after argument 'o'\n");
+					exit(1);
+				}
+				output_file_name = optarg;
+				break;
+			case 'p':
+				if(!optarg || !optarg[0]){
+					fprintf(stderr, "Error: expected playback file name after argument 'p'\n");
+					exit(1);
+				}
+				playback_file_name = optarg;
+				break;
+			case 'h':
+				printf("Usage: termr_player [-o output_file] [-p playback_file] recording_file\n");
+				exit(0);
+				break;
+		}
+	}
+
+	if(optind < argc){
+		recording_file_name = argv[optind];
+	} else {
+		fprintf(stderr, "Error: expected recording file name\n");
+		exit(1);
 	}
 }
 
@@ -134,8 +182,13 @@ int main(int argc, char **argv){
 	struct termr_playback_state read_state;
 	int prev_COLS;
 	int prev_LINES;
+	int do_frame = 0;
+	unsigned char dummy;
+
+	parse_arguments(argc, argv);
 
 	init_virtkeys();
+	init_audio();
 	initscr();
 	prev_COLS = COLS;
 	prev_LINES = LINES;
@@ -165,21 +218,27 @@ int main(int argc, char **argv){
 		green_background = COLOR_GREEN;
 	}
 
-	if(open_recording("test")){
+	if(open_recording(recording_file_name)){
 		endwin();
-		fprintf(stderr, "Error: could not open file for reading\n");
+		fprintf(stderr, "Error: could not open recording file for reading\n");
 		return 1;
 	}
 
 	playback_state.size_x = COLS;
 	playback_state.size_y = LINES;
 
-	if(argc <= 1){
-		init_playback_states(playback_state);
+	if(playback_file_name){
+		termrp_file = fopen(playback_file_name, "rb");
+		if(termrp_file){
+			read_playback_file(termrp_file);
+			fclose(termrp_file);
+		} else {
+			endwin();
+			fprintf(stderr, "Error: failed to read playback file\n");
+			exit(1);
+		}
 	} else {
-		termrp_file = fopen("test.termrp", "rb");
-		read_playback_file(termrp_file);
-		fclose(termrp_file);
+		init_playback_states(playback_state);
 	}
 
 	if(check_header(&term_size_x, &term_size_y)){
@@ -308,42 +367,97 @@ int main(int argc, char **argv){
 					prev_LINES = LINES;
 					do_refresh = 1;
 					break;
+				case 'b':
+					backwards = !backwards;
+					if(backwards){
+						snprintf(status, 255, "Backwards playback");
+						current_update--;
+						if(waiting){
+							fread_backwards(&dummy, sizeof(unsigned char), 1, recording);
+						}
+					} else {
+						snprintf(status, 255, "Forwards playback");
+						current_update++;
+						if(waiting){
+							fread(&dummy, sizeof(unsigned char), 1, recording);
+						}
+					}
+					break;
+				case 'f':
+					do_frame = 1;
+					paused = 0;
+					do_refresh = 1;
+					snprintf(status, 255, "Single frame");
+					break;
 			}
 		}
 
 		playback_state.frame = frame;
 
-		if(recording_playback){
-			write_playback_state(playback_state);
-		}
-
-		if(playing_playback_file){
-			read_state = read_playback_state();
-			if(!read_state.cut){
-				apply_state_changes(read_state, playback_state);
-			}
-			playback_state = read_state;
-		}
-
 		if(paused){
 			display_status();
-		}
+			//Sleep for a frame
+			clock_gettime(CLOCK_MONOTONIC, &current_time);
+			last_nanoseconds = get_nanoseconds(last_time);
+			current_nanoseconds = get_nanoseconds(current_time);
+			if(current_nanoseconds - last_nanoseconds < 25000000ULL/playback_state.speed){
+				sleep_time = (struct timespec) {.tv_sec = (25000000ULL/playback_state.speed - current_nanoseconds + last_nanoseconds)/1000000000ULL, .tv_nsec = (long long unsigned int) (25000000ULL/playback_state.speed - current_nanoseconds + last_nanoseconds)%1000000000ULL};
+				nanosleep(&sleep_time, NULL);
+				last_time.tv_sec = (last_nanoseconds + 25000000ULL/playback_state.speed)/1000000000ULL;
+				last_time.tv_nsec = (long long unsigned int) (last_nanoseconds + 25000000ULL/playback_state.speed)%1000000000ULL;
+			} else {
+				clock_gettime(CLOCK_MONOTONIC, &last_time);
+			}
+		} else {
+			if(recording_playback){
+				write_playback_state(playback_state);
+			}
 
-		next_update = next_action();
-		execute_action(next_update);
+			if(playing_playback_file){
+				read_state = read_playback_state();
+				if(!read_state.cut){
+					apply_state_changes(read_state, playback_state);
+				}
+				playback_state = read_state;
+			}
 
-		if(do_refresh && (!playing_playback_file || !playback_state.cut)){
-			termr_refresh();
+
+			if(!backwards){
+				next_update = next_action();
+				execute_action(next_update);
+			}
+			if(backwards){
+				execute_action_backwards(next_update);
+				next_update = next_action_backwards();
+			}
+
+			if(do_refresh && (!playing_playback_file || !playback_state.cut)){
+				termr_refresh();
+			}
+
+			if(do_frame){
+				do_frame = 0;
+				paused = 1;
+			}
 		}
 	} while(next_update != NONE);
 
-	termrp_file = fopen("test.termrp", "wb");
-	write_playback_file(termrp_file);
-	fclose(termrp_file);
+	if(output_file_name){
+		termrp_file = fopen(output_file_name, "wb");
+		if(termrp_file){
+			write_playback_file(termrp_file);
+			fclose(termrp_file);
+		} else {
+			endwin();
+			fprintf(stderr, "Error: failed to write playback file\n");
+			exit(1);
+		}
+	}
 
 	fclose(debug_file);
 	endwin();
 	fclose(recording);
+	deinit_audio();
 	deinit_virtkeys();
 }
 

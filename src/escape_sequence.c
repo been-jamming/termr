@@ -39,18 +39,18 @@ extern int green_background;
 hollow_list *pairs_table = NULL;
 
 static void global_set_attr(int attr){
-	termr_write_set_attr(global_attr | attr);
-	//global_attr |= attr;
+	//termr_write_set_attr(global_attr | attr);
+	global_attr |= attr;
 }
 
 static void global_unset_attr(int attr){
-	termr_write_set_attr(global_attr & ~attr);
-	//global_attr &= ~attr;
+	//termr_write_set_attr(global_attr & ~attr);
+	global_attr &= ~attr;
 }
 
 static void global_set_color(int color){
-	termr_write_set_attr((global_attr&~A_COLOR) | color);
-	//global_attr = (global_attr&~A_COLOR) | color;
+	//termr_write_set_attr((global_attr&~A_COLOR) | color);
+	global_attr = (global_attr&~A_COLOR) | color;
 }
 
 int get_global_color(){
@@ -99,7 +99,8 @@ void sgr_nothing(void){
 }
 
 void sgr_reset(void){
-	termr_write_set_attr(A_NORMAL);
+	//termr_write_set_attr(A_NORMAL);
+	global_attr = A_NORMAL;
 	global_foreground_color = COLOR_WHITE;
 	global_background_color = COLOR_BLACK;
 	global_set_color(get_global_color());
@@ -442,7 +443,8 @@ void process_control_sequence(FILE *debug_file){
 				termr_write_clrtoeol();
 				break;
 			case 1:
-				termr_write_set_attr(A_NORMAL);
+				//termr_write_set_attr(A_NORMAL);
+				global_attr = A_NORMAL;
 				termr_getyx(&y, &x);
 				termr_write_move(y, 0);
 				for(i = 0; i < x; i++){
@@ -475,8 +477,8 @@ int parse_escape_char(char c, FILE *debug_file){
 		case ESCAPE:
 			if(c == 'c'){
 				//termr_erase();
-				//global_attr = A_NORMAL;
-				termr_write_set_attr(A_NORMAL);
+				global_attr = A_NORMAL;
+				//termr_write_set_attr(A_NORMAL);
 				global_foreground_color = COLOR_WHITE;
 				global_background_color = COLOR_BLACK;
 				global_set_color(get_global_color());

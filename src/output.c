@@ -2,8 +2,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <ncurses.h>
+#include <unistd.h>
 #include "playback/player.h"
 #include "state.h"
+#include "output.h"
 
 extern FILE *output_file;
 extern int global_attr;
@@ -57,32 +59,134 @@ void termr_write_input(char c){
 }
 
 void termr_write_addch(char c, int do_print){
-	if(frame_count)
-		termr_output_frames();
-	fwrite(&c, sizeof(char), 1, output_file);
-	append_update_type(PRINT);
-	if(do_print){
-		termr_addch(c);
+	int prev_x;
+	int prev_y;
+	chtype prev_char;
+	signed char diff;
+	chtype attr_diff;
+	chtype all_diff;
+
+	//Only do anything if c is a visible character
+	if(c >= ' ' && c <= '~'){
+		termr_getyx(&prev_y, &prev_x);
+		prev_char = termr_mvinch(prev_y, prev_x);
+		diff = (signed char) c - (signed char) (prev_char&0x7F);
+		attr_diff = global_attr - prev_char&~0x7F;
+		all_diff = ((chtype) c | global_attr) - prev_char;
+
+		if(frame_count)
+			termr_output_frames();
+
+		if(prev_y >= LINES - 1 && prev_x >= COLS - 1){
+			//We need to manually scroll the terminal and make sure the operation is recorded.
+			//This ensures that printing a character is reversible.
+			termr_write_scroll();
+			termr_write_move(LINES - 2, COLS - 1);
+		}
+
+		if(attr_diff == 0){
+			//If the character has the same attribute, use the PRINT update type
+			fwrite(&diff, sizeof(char), 1, output_file);
+			append_update_type(PRINT);
+		} else {
+			//If the character has different attributes, use the PRINT_ATTR update type
+			fwrite(&all_diff, sizeof(chtype), 1, output_file);
+			append_update_type(PRINT_ATTR);
+		}
+
+		if(do_print){
+			termr_addch(c);
+		}
 	}
 }
 
-void termr_write_set_attr(int new_attr){
-	if(frame_count)
-		termr_output_frames();
-	fwrite(&new_attr, sizeof(int), 1, output_file);
-	append_update_type(ATTR);
-	global_attr = new_attr;
-}
-
 void termr_write_move(short y, short x){
+	int prev_x;
+	int prev_y;
+	short diff_x;
+	short diff_y;
+
+	termr_getyx(&prev_y, &prev_x);
+	diff_x = x - prev_x;
+	diff_y = y - prev_y;
+
 	if(frame_count)
 		termr_output_frames();
-	fwrite(&x, sizeof(short), 1, output_file);
-	fwrite(&y, sizeof(short), 1, output_file);
+	fwrite(&diff_x, sizeof(short), 1, output_file);
+	fwrite(&diff_y, sizeof(short), 1, output_file);
 	append_update_type(CURSOR);
 	termr_move(y, x);
 }
 
+void termr_write_scroll(){
+	int prev_x, x;
+	int prev_y, y;
+	chtype c;
+	int prev_global_attr;
+
+	termr_getyx(&prev_y, &prev_x);
+	prev_global_attr = global_attr;
+
+	termr_write_move(0, 0);
+
+	for(y = 1; y < LINES - 1; y++){
+		for(x = 0; x < COLS; x++){
+			c = termr_mvinch(y, x);
+			global_attr = c&~0xFF;
+			//termr_write_set_attr(c&~0xFF);
+			termr_write_addch(c&0xFF, 1);
+		}
+	}
+
+	for(x = 0; x < COLS - 1; x++){
+		c = termr_mvinch(y, x);
+		global_attr = c&~0xFF;
+		//termr_write_set_attr(c&~0xFF);
+		termr_write_addch(c&0xFF, 1);
+	}
+
+	global_attr = prev_global_attr;
+	//termr_write_set_attr(prev_global_attr);
+	for(x = 0; x < COLS; x++){
+		termr_write_addch(' ', 1);
+	}
+
+	termr_write_move(prev_y, prev_x);
+}
+
+void termr_write_advance_cursor(){
+	int prev_x;
+	int prev_y;
+
+	termr_getyx(&prev_y, &prev_x);
+
+	if(prev_x < COLS - 1){
+		termr_write_move(prev_y, prev_x + 1);
+	} else if(prev_y < LINES - 1){
+		termr_write_move(prev_y + 1, 0);
+	} else {
+		termr_write_move(prev_y, 0);
+		termr_write_scroll();
+	}
+}
+
+void termr_write_newline(){
+	int prev_x;
+	int prev_y;
+
+	termr_getyx(&prev_y, &prev_x);
+
+	if(prev_y < LINES - 1){
+		termr_write_move(prev_y + 1, 0);
+	} else {
+		termr_write_move(prev_y, 0);
+		termr_write_scroll();
+	}
+}
+
+//I don't believe this functions is used.
+//besides, the implementation is wrong.
+//can't go to end of line if on the last line in the terminal
 void termr_write_clrtoeol(){
 	int cursor_x;
 	int cursor_y;

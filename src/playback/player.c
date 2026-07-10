@@ -46,10 +46,10 @@ struct termr_playback_state playback_state =
 static int term_size_x;
 static int term_size_y;
 
-int zoom = 0;
-
 unsigned char recording_playback = 0;
 unsigned char playing_playback_file = 0;
+unsigned char skipping = 0;
+unsigned char skipping_paused = 0;
 FILE *termrp_file = NULL;
 
 extern long current_update;
@@ -58,6 +58,15 @@ extern unsigned char waiting;
 char *playback_file_name = NULL;
 char *recording_file_name = NULL;
 char *output_file_name = NULL;
+
+static long bookmarks[256];
+unsigned char bookmark_seeking = 0;
+unsigned char bookmark_paused = 0;
+unsigned char bookmark_backwards = 0;
+long bookmark_frame;
+unsigned char do_quit = 0;
+
+extern long num_frames;
 
 static uint64_t get_nanoseconds(struct timespec t){
 	return 1000000000ULL*t.tv_sec + t.tv_nsec;
@@ -183,6 +192,7 @@ int main(int argc, char **argv){
 	int prev_COLS;
 	int prev_LINES;
 	int do_frame = 0;
+	int k;
 	unsigned char dummy;
 
 	parse_arguments(argc, argv);
@@ -216,6 +226,10 @@ int main(int argc, char **argv){
 		red_background = COLOR_RED;
 		yellow_background = COLOR_YELLOW;
 		green_background = COLOR_GREEN;
+	}
+	
+	for(k = 0; k < 256; k++){
+		bookmarks[k] = -1;
 	}
 
 	if(open_recording(recording_file_name)){
@@ -357,11 +371,9 @@ int main(int argc, char **argv){
 					playback_state.size_x = COLS;
 					playback_state.size_y = LINES;
 					if(COLS < prev_COLS){
-						zoom++;
-						snprintf(status, 255, "Zoom in %d", zoom);
+						snprintf(status, 255, "Zoom in (%d, %d)", playback_state.size_x, playback_state.size_y);
 					} else {
-						zoom--;
-						snprintf(status, 255, "Zoom out %d", zoom);
+						snprintf(status, 255, "Zoom out (%d, %d)", playback_state.size_x, playback_state.size_y);
 					}
 					prev_COLS = COLS;
 					prev_LINES = LINES;
@@ -389,12 +401,86 @@ int main(int argc, char **argv){
 					do_refresh = 1;
 					snprintf(status, 255, "Single frame");
 					break;
+				case 's':
+					skipping = 1;
+					skipping_paused = paused;
+					paused = 0;
+					do_refresh = 1;
+					snprintf(status, 255, "Skipping");
+					break;
+				case 'q':
+					snprintf(status, 255, "Enter key for bookmark");
+					termr_refresh();
+					display_status();
+					nodelay(stdscr, 0);
+					key_press = getch()%256;
+					nodelay(stdscr, 1);
+					if(key_press >= ' ' && key_press < '~'){
+						snprintf(status, 255, "Bookmark set for '%c'", key_press);
+					} else {
+						snprintf(status, 255, "Bookmark set for %02X", key_press);
+					}
+					do_refresh = 1;
+					bookmarks[key_press] = frame;
+					break;
+				case '\t':
+					if(playing_playback_file)
+						break;
+					bookmark_paused = paused;
+					bookmark_backwards = backwards;
+					snprintf(status, 255, "Enter bookmark to seek");
+					termr_refresh();
+					display_status();
+					nodelay(stdscr, 0);
+					key_press = getch()%256;
+					nodelay(stdscr, 1);
+					if(bookmarks[key_press] >= 0 && bookmarks[key_press] > frame){
+						backwards = 0;
+						bookmark_seeking = 1;
+						paused = 0;
+						bookmark_frame = bookmarks[key_press];
+					} else if(bookmarks[key_press] >= 0 && bookmarks[key_press] < frame){
+						backwards = 1;
+						bookmark_seeking = 1;
+						paused = 0;
+						bookmark_frame = bookmarks[key_press];
+					}
+
+					if(backwards && !bookmark_backwards){
+						current_update--;
+						if(waiting){
+							fread_backwards(&dummy, sizeof(unsigned char), 1, recording);
+						}
+					} else if(!backwards && bookmark_backwards){
+						current_update++;
+						if(waiting){
+							fread(&dummy, sizeof(unsigned char), 1, recording);
+						}
+					}
+					do_refresh = 1;
+					break;
+				case 'Q':
+					do_quit = 1;
+					break;
 			}
 		}
 
 		playback_state.frame = frame;
 
+
+		if(backwards && frame == 1){
+			paused = 1;
+			snprintf(status, 255, "Start");
+		} else if(!backwards && frame == num_frames - 1){
+			paused = 1;
+			snprintf(status, 255, "End");
+		}
+
 		if(paused){
+			if(do_refresh){
+				termr_refresh();
+				do_refresh = 0;
+			}
 			display_status();
 			//Sleep for a frame
 			clock_gettime(CLOCK_MONOTONIC, &current_time);
@@ -413,7 +499,7 @@ int main(int argc, char **argv){
 				write_playback_state(playback_state);
 			}
 
-			if(playing_playback_file){
+			if(playing_playback_file && !skipping && !bookmark_seeking){
 				read_state = read_playback_state();
 				if(!read_state.cut){
 					apply_state_changes(read_state, playback_state);
@@ -421,15 +507,17 @@ int main(int argc, char **argv){
 				playback_state = read_state;
 			}
 
-
-			if(!backwards){
+			if(!backwards && frame < num_frames){
 				next_update = next_action();
 				execute_action(next_update);
 			}
-			if(backwards){
+			if(backwards && frame > 0){
 				execute_action_backwards(next_update);
 				next_update = next_action_backwards();
 			}
+
+			if(skipping || (!skipping && skipping_paused))
+				do_refresh = 1;
 
 			if(do_refresh && (!playing_playback_file || !playback_state.cut)){
 				termr_refresh();
@@ -439,8 +527,35 @@ int main(int argc, char **argv){
 				do_frame = 0;
 				paused = 1;
 			}
+
+			if(!skipping && skipping_paused){
+				paused = 1;
+				skipping_paused = 0;
+			}
+
+			if(bookmark_seeking && frame == bookmark_frame){
+				bookmark_seeking = 0;
+
+				if(bookmark_backwards && !backwards){
+					current_update--;
+					if(waiting){
+						fread_backwards(&dummy, sizeof(unsigned char), 1, recording);
+					}
+				} else if(!bookmark_backwards && backwards){
+					current_update++;
+					if(waiting){
+						fread(&dummy, sizeof(unsigned char), 1, recording);
+					}
+				}
+
+				backwards = bookmark_backwards;
+				paused = bookmark_paused;
+			}
 		}
-	} while(next_update != NONE);
+
+		if(do_quit)
+			break;
+	} while(1);
 
 	if(output_file_name){
 		termrp_file = fopen(output_file_name, "wb");

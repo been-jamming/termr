@@ -24,12 +24,21 @@ long current_update = 0;
 
 extern unsigned char paused;
 extern unsigned char playing_playback_file;
+extern unsigned char skipping;
 extern struct termr_playback_state playback_state;
 
 long frame = 0;
 static long frame_start = 0;
 static long duration = 0;
 unsigned char waiting = 0;
+
+extern unsigned char bookmark_seeking;
+extern unsigned char bookmark_paused;
+extern unsigned char bookmark_backwards;
+extern long bookmark_frame;
+extern unsigned char backwards;
+
+long num_frames;
 
 static uint64_t get_nanoseconds(struct timespec t){
 	return 1000000000ULL*t.tv_sec + t.tv_nsec;
@@ -59,6 +68,8 @@ int check_header(int *term_size_x, int *term_size_y){
 	if(header.identifier[5] || strcmp(header.identifier, "termr")){
 		return 1;
 	}
+
+	num_frames = header.frames;
 
 	updates_offset = header.updates_offset;
 	num_updates = header.num_updates;
@@ -90,7 +101,7 @@ unsigned char next_action(){
 		output = NONE;
 	}
 	//if(output != NEXT_FRAME && current_update < num_updates && !paused)
-	if(!waiting)
+	if(!waiting && output != NONE)
 		current_update++;
 
 	return output;
@@ -107,7 +118,7 @@ unsigned char next_action_backwards(){
 		output = NONE;
 	}
 	//if(output != NEXT_FRAME && current_update > 0 && !paused){
-	if(!waiting)
+	if(!waiting && output != NONE)
 		current_update--;
 	//}
 
@@ -142,7 +153,8 @@ void execute_action(unsigned char update_type){
 					duration = 256;
 				frame_start = frame;
 
-				termr_refresh();
+				if((!playback_state.cut || !playing_playback_file) && !skipping)
+					termr_refresh();
 				waiting = 1;
 			}
 			break;
@@ -158,6 +170,7 @@ void execute_action(unsigned char update_type){
 			character = prev_char + char_diff;
 			global_attr = prev_chtype&~0x7F;
 			print_bash_char(character);
+			skipping = 0;
 			break;
 		case PRINT_ATTR:
 			fread(&all_diff, sizeof(chtype), 1, recording);
@@ -167,6 +180,7 @@ void execute_action(unsigned char update_type){
 			character = next_chtype&0x7F;
 			global_attr = next_chtype&~0x7F;
 			print_bash_char(character);
+			skipping = 0;
 			break;
 		case CURSOR:
 			fread(&cursor_x_diff, sizeof(short), 1, recording);
@@ -179,7 +193,7 @@ void execute_action(unsigned char update_type){
 	}
 
 	if(waiting){
-		if(!playback_state.cut || !playing_playback_file){
+		if((!playback_state.cut || !playing_playback_file) && !skipping && !bookmark_seeking){
 			clock_gettime(CLOCK_MONOTONIC, &current_time);
 			last_nanoseconds = get_nanoseconds(last_time);
 			current_nanoseconds = get_nanoseconds(current_time);
@@ -230,7 +244,8 @@ void execute_action_backwards(unsigned char update_type){
 					duration = 256;
 				frame_start = frame - duration;
 
-				termr_refresh();
+				if((!playback_state.cut || !playing_playback_file) && !skipping)
+					termr_refresh();
 				waiting = 1;
 			}
 			break;
@@ -253,6 +268,7 @@ void execute_action_backwards(unsigned char update_type){
 			character = prev_char - char_diff;
 			global_attr = prev_chtype&~0x7F;
 			termr_putch(character);
+			skipping = 0;
 			break;
 		case PRINT_ATTR:
 			fread_backwards(&all_diff, sizeof(chtype), 1, recording);
@@ -270,6 +286,7 @@ void execute_action_backwards(unsigned char update_type){
 			character = next_chtype&0x7F;
 			global_attr = next_chtype&~0x7F;
 			termr_putch(character);
+			skipping = 0;
 			break;
 		case CURSOR:
 			fread_backwards(&cursor_y_diff, sizeof(short), 1, recording);
@@ -282,7 +299,7 @@ void execute_action_backwards(unsigned char update_type){
 	}
 
 	if(waiting){
-		if(!playback_state.cut || !playing_playback_file){
+		if((!playback_state.cut || !playing_playback_file) && !skipping && !bookmark_seeking){
 			clock_gettime(CLOCK_MONOTONIC, &current_time);
 			last_nanoseconds = get_nanoseconds(last_time);
 			current_nanoseconds = get_nanoseconds(current_time);

@@ -38,6 +38,8 @@ extern unsigned char bookmark_backwards;
 extern long bookmark_frame;
 extern unsigned char backwards;
 
+extern double playback_speed;
+
 long num_frames;
 
 static uint64_t get_nanoseconds(struct timespec t){
@@ -141,6 +143,7 @@ void execute_action(unsigned char update_type){
 	short cursor_x;
 	short cursor_y;
 	int attr_diff;
+	double speed;
 
 	switch(update_type){
 		case NONE:
@@ -193,15 +196,16 @@ void execute_action(unsigned char update_type){
 	}
 
 	if(waiting){
+		speed = playback_state.speed*playback_speed;
 		if((!playback_state.cut || !playing_playback_file) && !skipping && !bookmark_seeking){
 			clock_gettime(CLOCK_MONOTONIC, &current_time);
 			last_nanoseconds = get_nanoseconds(last_time);
 			current_nanoseconds = get_nanoseconds(current_time);
-			if(current_nanoseconds - last_nanoseconds < 25000000ULL/playback_state.speed){
-				sleep_time = (struct timespec) {.tv_sec = (25000000ULL/playback_state.speed - current_nanoseconds + last_nanoseconds)/1000000000ULL, .tv_nsec = (long long unsigned int) (25000000ULL/playback_state.speed - current_nanoseconds + last_nanoseconds)%1000000000ULL};
+			if(current_nanoseconds - last_nanoseconds < 25000000ULL/speed){
+				sleep_time = (struct timespec) {.tv_sec = (25000000ULL/speed - current_nanoseconds + last_nanoseconds)/1000000000ULL, .tv_nsec = (long long unsigned int) (25000000ULL/speed - current_nanoseconds + last_nanoseconds)%1000000000ULL};
 				nanosleep(&sleep_time, NULL);
-				last_time.tv_sec = (last_nanoseconds + 25000000ULL/playback_state.speed)/1000000000ULL;
-				last_time.tv_nsec = (long long unsigned int) (last_nanoseconds + 25000000ULL/playback_state.speed)%1000000000ULL;
+				last_time.tv_sec = (last_nanoseconds + 25000000ULL/speed)/1000000000ULL;
+				last_time.tv_nsec = (long long unsigned int) (last_nanoseconds + 25000000ULL/speed)%1000000000ULL;
 			} else {
 				clock_gettime(CLOCK_MONOTONIC, &last_time);
 			}
@@ -232,6 +236,7 @@ void execute_action_backwards(unsigned char update_type){
 	int attr_diff;
 	int width;
 	int height;
+	double speed;
 
 	switch(update_type){
 		case NONE:
@@ -299,15 +304,16 @@ void execute_action_backwards(unsigned char update_type){
 	}
 
 	if(waiting){
+		speed = playback_state.speed*playback_speed;
 		if((!playback_state.cut || !playing_playback_file) && !skipping && !bookmark_seeking){
 			clock_gettime(CLOCK_MONOTONIC, &current_time);
 			last_nanoseconds = get_nanoseconds(last_time);
 			current_nanoseconds = get_nanoseconds(current_time);
-			if(current_nanoseconds - last_nanoseconds < 25000000ULL/playback_state.speed){
-				sleep_time = (struct timespec) {.tv_sec = (25000000ULL/playback_state.speed - current_nanoseconds + last_nanoseconds)/1000000000ULL, .tv_nsec = (long long unsigned int) (25000000ULL/playback_state.speed - current_nanoseconds + last_nanoseconds)%1000000000ULL};
+			if(current_nanoseconds - last_nanoseconds < 25000000ULL/speed){
+				sleep_time = (struct timespec) {.tv_sec = (25000000ULL/speed - current_nanoseconds + last_nanoseconds)/1000000000ULL, .tv_nsec = (long long unsigned int) (25000000ULL/speed - current_nanoseconds + last_nanoseconds)%1000000000ULL};
 				nanosleep(&sleep_time, NULL);
-				last_time.tv_sec = (last_nanoseconds + 25000000ULL/playback_state.speed)/1000000000ULL;
-				last_time.tv_nsec = (long long unsigned int) (last_nanoseconds + 25000000ULL/playback_state.speed)%1000000000ULL;
+				last_time.tv_sec = (last_nanoseconds + 25000000ULL/speed)/1000000000ULL;
+				last_time.tv_nsec = (long long unsigned int) (last_nanoseconds + 25000000ULL/speed)%1000000000ULL;
 			} else {
 				clock_gettime(CLOCK_MONOTONIC, &last_time);
 			}

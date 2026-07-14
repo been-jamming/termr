@@ -66,6 +66,8 @@ unsigned char bookmark_backwards = 0;
 long bookmark_frame;
 unsigned char do_quit = 0;
 
+double playback_speed = 1.0;
+
 extern long num_frames;
 
 static uint64_t get_nanoseconds(struct timespec t){
@@ -114,6 +116,7 @@ void apply_state_changes(struct termr_playback_state state, struct termr_playbac
 	struct timespec ts;
 	struct timespec rem;
 	int prev_COLS;
+	int count = 0;
 
 	termr_set_offset(state.x, state.y);
 
@@ -131,6 +134,9 @@ void apply_state_changes(struct termr_playback_state state, struct termr_playbac
 				ts = rem;
 			}
 			termr_refresh();
+			count++;
+			if(count >= 100)
+				break;
 		}
 
 		while(COLS > state.size_x){
@@ -146,7 +152,13 @@ void apply_state_changes(struct termr_playback_state state, struct termr_playbac
 				ts = rem;
 			}
 			termr_refresh();
+			count++;
+			if(count >= 100)
+				break;
 		}
+
+		if(count >= 100)
+			break;
 	}
 }
 
@@ -296,18 +308,34 @@ int main(int argc, char **argv){
 					do_refresh = 1;
 					break;
 				case '>':
-					if(playback_state.speed < 65536){
-						playback_state.speed *= 2;
-					}
+					if(!playing_playback_file){
+						if(playback_state.speed < 65536){
+							playback_state.speed *= 2;
+						}
 
-					snprintf(status, 255, "Speed: %lf", playback_state.speed);
+						snprintf(status, 255, "Speed: %lf", playback_state.speed);
+					} else {
+						if(playback_speed < 65536){
+							playback_speed *= 2;
+						}
+
+						snprintf(status, 255, "Playback speed: %lf", playback_speed);
+					}
 					break;
 				case '<':
-					if(playback_state.speed > 1.0/65536){
-						playback_state.speed /= 2;
-					}
+					if(!playing_playback_file){
+						if(playback_state.speed > 1.0/65536){
+							playback_state.speed /= 2;
+						}
 
-					snprintf(status, 255, "Speed: %lf", playback_state.speed);
+						snprintf(status, 255, "Speed: %lf", playback_state.speed);
+					} else {
+						if(playback_speed > 1.0/65536){
+							playback_speed /= 2;
+						}
+
+						snprintf(status, 255, "Playback speed: %lf", playback_speed);
+					}
 					break;
 				case KEY_LEFT:
 					if(playback_state.x > 0){
@@ -495,8 +523,12 @@ int main(int argc, char **argv){
 				clock_gettime(CLOCK_MONOTONIC, &last_time);
 			}
 		} else {
-			if(recording_playback){
+			if(recording_playback && !bookmark_seeking){
 				write_playback_state(playback_state);
+			}
+
+			if(!playing_playback_file){
+				playback_speed = 1.0;
 			}
 
 			if(playing_playback_file && !skipping && !bookmark_seeking){

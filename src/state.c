@@ -135,7 +135,16 @@ void termr_refresh(){
 			}
 		}
 	}
-	move(state.cursor_y - state.offset_y, state.cursor_x - state.offset_x);
+
+	if(state.cursor_y - state.offset_y < LINES &&
+	   state.cursor_y - state.offset_y >= 0 &&
+	   state.cursor_x - state.offset_x < COLS &&
+	   state.cursor_x - state.offset_y >= 0){
+		curs_set(1);
+		move(state.cursor_y - state.offset_y, state.cursor_x - state.offset_x);
+	} else {
+		curs_set(0);
+	}
 	refresh();
 }
 

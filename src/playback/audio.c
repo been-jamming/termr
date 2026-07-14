@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include "player.h"
 
 #define NUM_TRACKS 3
 
@@ -13,6 +14,8 @@ static float track_gains[NUM_TRACKS] = {0.8, 0.8, 0.8};
 static MIX_Mixer *mixer;
 static MIX_Audio *click_audios[NUM_TRACKS];
 static MIX_Track *click_tracks[NUM_TRACKS];
+
+extern struct termr_playback_state playback_state;
 
 void init_audio(void){
 	int i;
@@ -74,6 +77,10 @@ void play_click(void){
 
 	for(i = 0; i < NUM_TRACKS; i++){
 		if(!MIX_TrackPlaying(click_tracks[random_order[i]])){
+			if(!MIX_SetTrackFrequencyRatio(click_tracks[random_order[i]], 2.0)){
+				fprintf(stderr, "Error: Failed to set track speed\n");
+				exit(1);
+			}
 			if(!MIX_SetTrackGain(click_tracks[random_order[i]], track_gains[random_order[i]] + (rand()%100)/500.0)){
 				fprintf(stderr, "Error: Failed to set track gain\n");
 				exit(1);

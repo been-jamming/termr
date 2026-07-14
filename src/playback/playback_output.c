@@ -11,7 +11,8 @@ static long num_states = 0;
 static long max_states = 0;
 static long current_state = 0;
 
-long frame;
+extern long frame;
+//long frame;
 
 void init_playback_states(struct termr_playback_state state){
 	states = malloc(sizeof(struct termr_playback_state));

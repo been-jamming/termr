@@ -4,12 +4,14 @@
 #include "player.h"
 #include "playback_output.h"
 
+static struct termr_playback_state playback_state =
+	(struct termr_playback_state) {.size_x = 0, .size_y = 0, .x = 0, .y = 0, .speed = 1.0, .frame = 0, .cut = 0};
 static struct termr_playback_state *states = NULL;
 static long num_states = 0;
 static long max_states = 0;
 static long current_state = 0;
 
-extern long frame;
+long frame;
 
 void init_playback_states(struct termr_playback_state state){
 	states = malloc(sizeof(struct termr_playback_state));
@@ -45,7 +47,7 @@ static void insert_state(struct termr_playback_state state, long index){
 		max_states = next_max_states;
 	}
 
-	if(index < num_states - 1){
+	if(index < num_states){
 		memmove(states + index + 1, states + index, sizeof(struct termr_playback_state)*(num_states - index));
 		states[index] = state;
 	} else {
@@ -123,3 +125,73 @@ void read_playback_file(FILE *file){
 	}
 }
 
+static void delete_playback_state(long index){
+	if(index < num_states - 1){
+		memmove(states + index, states + index + 1, sizeof(struct termr_playback_state)*(num_states - index - 1));
+	}
+
+	num_states--;
+}
+
+/*
+
+long get_bad_playback_state(void){
+	int k;
+
+	for(k = 0; k < num_states; k++){
+		if(states[k].frame == 0){
+			return k;
+		}
+	}
+
+	return -1;
+}
+
+static void print_playback_state(struct termr_playback_state playback_state){
+	printf("size x: %d\n", playback_state.size_x);
+	printf("size y: %d\n", playback_state.size_y);
+	printf("x: %d\n", playback_state.x);
+	printf("y: %d\n", playback_state.y);
+	printf("speed: %lf\n", playback_state.speed);
+	printf("frame: %ld\n", playback_state.frame);
+	printf("cut: %d\n", (int) (playback_state.cut));
+	printf("------------\n");
+}
+
+static int sort_compare(const void *ptr0, const void *ptr1){
+	const struct termr_playback_state *playback_state0, *playback_state1;
+
+	playback_state0 = ptr0;
+	playback_state1 = ptr1;
+
+	return playback_state0->frame - playback_state1->frame;
+}
+
+int main(int argc, char **argv){
+	char *file_name;
+	FILE *file;
+	long bad_index;
+
+	file_name = argv[1];
+
+	file = fopen(file_name, "rb");
+
+	init_playback_states(playback_state);
+	read_playback_file(file);
+	fclose(file);
+
+	qsort(states, num_states, sizeof(playback_state), sort_compare);
+	
+	while((bad_index = get_bad_playback_state()) >= 0){
+		delete_playback_state(bad_index);
+	}
+
+	file_name = argv[2];
+	file = fopen(file_name, "wb");
+	write_playback_file(file);
+	fclose(file);
+
+	return 0;
+}
+
+*/
